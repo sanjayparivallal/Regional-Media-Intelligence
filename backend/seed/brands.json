@@ -1,0 +1,14 @@
+[
+  {"name": "PayU", "display_name": "PayU", "industry": "Fintech", "aliases": ["Pay U", "PayU India", "PayU Finance"], "keywords": ["digital payment", "fintech", "payment gateway", "UPI"]},
+  {"name": "Paytm", "display_name": "Paytm", "industry": "Fintech", "aliases": ["Pay TM", "Paytm Payments Bank", "One97"], "keywords": ["digital wallet", "payment", "fintech", "UPI"]},
+  {"name": "PhonePe", "display_name": "PhonePe", "industry": "Fintech", "aliases": ["Phone Pe", "PhonePe Pvt"], "keywords": ["UPI", "digital payment", "fintech"]},
+  {"name": "Razorpay", "display_name": "Razorpay", "industry": "Fintech", "aliases": ["Razor Pay", "Razorpay Software"], "keywords": ["payment gateway", "fintech", "merchant"]},
+  {"name": "CRED", "display_name": "CRED", "industry": "Fintech", "aliases": ["Cred App", "CRED Club"], "keywords": ["credit card", "fintech", "rewards"]},
+  {"name": "BharatPe", "display_name": "BharatPe", "industry": "Fintech", "aliases": ["Bharat Pe", "BharatPe India"], "keywords": ["merchant payment", "QR code", "fintech"]},
+  {"name": "Flipkart", "display_name": "Flipkart", "industry": "E-commerce", "aliases": ["Flip Kart", "Flipkart India"], "keywords": ["ecommerce", "online shopping", "marketplace"]},
+  {"name": "Zomato", "display_name": "Zomato", "industry": "Food Tech", "aliases": ["Zomato Ltd", "Zomato India"], "keywords": ["food delivery", "restaurant", "blinkit"]},
+  {"name": "Swiggy", "display_name": "Swiggy", "industry": "Food Tech", "aliases": ["Swiggy India", "Bundl Technologies"], "keywords": ["food delivery", "instamart", "quick commerce"]},
+  {"name": "Reliance", "display_name": "Reliance Industries", "industry": "Conglomerate", "aliases": ["RIL", "Reliance Industries", "Reliance Group"], "keywords": ["Jio", "Reliance Retail", "refinery"]},
+  {"name": "Tata Group", "display_name": "Tata Group", "industry": "Conglomerate", "aliases": ["Tata Sons", "Tata Motors", "TCS", "Tata Steel"], "keywords": ["conglomerate", "manufacturing", "IT services"]},
+  {"name": "Adani Group", "display_name": "Adani Group", "industry": "Infrastructure", "aliases": ["Adani Enterprises", "Adani Ports", "Adani Power"], "keywords": ["ports", "energy", "infrastructure", "airport"]}
+]

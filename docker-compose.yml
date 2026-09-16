@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: rmi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rmi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rmi_password}
+      POSTGRES_DB: ${POSTGRES_DB:-rmi_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rmi_user -d rmi_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rmi-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Regional Media Intelligence Agent
+      - APP_ENV=production
+      - DEBUG=false
+      - DEMO_MODE=true
+      - DATABASE_URL=postgresql+asyncpg://rmi_user:rmi_password@db:5432/rmi_db
+      - STORAGE_PATH=/app/storage
+      - UPLOAD_PATH=/app/storage/uploads
+      - PAGE_IMAGE_PATH=/app/storage/pages
+      - OCR_ENGINE=auto
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rmi-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000/api
+      - PORT=3000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  storage_data:

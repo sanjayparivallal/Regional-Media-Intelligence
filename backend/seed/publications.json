@@ -1,0 +1,12 @@
+[
+  {"name": "Dainik Jagran", "display_name": "Dainik Jagran", "language": "hi", "region": "North India", "state": "Uttar Pradesh", "reach_tier": 1, "estimated_circulation": 4000000, "default_ocr_language": "hi"},
+  {"name": "Hindustan", "display_name": "Hindustan (Hindi)", "language": "hi", "region": "North India", "state": "Bihar", "reach_tier": 1, "estimated_circulation": 3500000, "default_ocr_language": "hi"},
+  {"name": "Amar Ujala", "display_name": "Amar Ujala", "language": "hi", "region": "North India", "state": "Uttar Pradesh", "reach_tier": 1, "estimated_circulation": 3000000, "default_ocr_language": "hi"},
+  {"name": "Rajasthan Patrika", "display_name": "Rajasthan Patrika", "language": "hi", "region": "West India", "state": "Rajasthan", "reach_tier": 2, "estimated_circulation": 2500000, "default_ocr_language": "hi"},
+  {"name": "Dinamalar", "display_name": "Dinamalar", "language": "ta", "region": "South India", "state": "Tamil Nadu", "reach_tier": 1, "estimated_circulation": 1500000, "default_ocr_language": "ta"},
+  {"name": "Dinamani", "display_name": "Dinamani", "language": "ta", "region": "South India", "state": "Tamil Nadu", "reach_tier": 2, "estimated_circulation": 800000, "default_ocr_language": "ta"},
+  {"name": "Daily Thanthi", "display_name": "Daily Thanthi", "language": "ta", "region": "South India", "state": "Tamil Nadu", "reach_tier": 1, "estimated_circulation": 2000000, "default_ocr_language": "ta"},
+  {"name": "Eenadu", "display_name": "Eenadu", "language": "te", "region": "South India", "state": "Telangana", "reach_tier": 1, "estimated_circulation": 1700000, "default_ocr_language": "te"},
+  {"name": "Lokmat", "display_name": "Lokmat", "language": "mr", "region": "West India", "state": "Maharashtra", "reach_tier": 1, "estimated_circulation": 1800000, "default_ocr_language": "mr"},
+  {"name": "Anandabazar Patrika", "display_name": "Anandabazar Patrika", "language": "bn", "region": "East India", "state": "West Bengal", "reach_tier": 1, "estimated_circulation": 1200000, "default_ocr_language": "bn"}
+]
