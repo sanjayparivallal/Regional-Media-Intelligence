@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+body {
+  @apply bg-surface-50 text-slate-800 font-sans antialiased;
+}
+
+.glass-card {
+  @apply bg-white rounded-2xl border border-slate-200/80 shadow-glass transition-all duration-300;
+}
+.glass-card:hover {
+  @apply shadow-glass-lg border-slate-300/80;
+}
+
+.kpi-card {
+  @apply bg-white rounded-2xl border border-slate-200/80 shadow-glass transition-all duration-300 p-6 relative overflow-hidden;
+}
+.kpi-card:hover {
+  @apply shadow-glass-lg -translate-y-0.5 border-slate-300/80;
+}
+.kpi-card::before {
+  content: '';
+  @apply absolute top-0 left-0 right-0 h-1.5 rounded-t-2xl;
+}
+.kpi-card.primary::before { @apply bg-gradient-to-r from-primary-600 to-indigo-500; }
+.kpi-card.cyan::before { @apply bg-gradient-to-r from-cyan-500 to-teal-400; }
+.kpi-card.emerald::before { @apply bg-gradient-to-r from-emerald-500 to-green-400; }
+.kpi-card.amber::before { @apply bg-gradient-to-r from-amber-500 to-yellow-400; }
+.kpi-card.coral::before { @apply bg-gradient-to-r from-red-500 to-coral-500; }
+.kpi-card.violet::before { @apply bg-gradient-to-r from-violet-600 to-purple-500; }
+
+.nav-item {
+  @apply flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 text-slate-600 hover:text-slate-900;
+}
+.nav-item:hover {
+  @apply bg-slate-100/80;
+}
+.nav-item.active {
+  @apply bg-primary-50 text-primary-700 font-semibold shadow-xs border border-primary-100/60;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ring-inset;
+}
+.badge-critical { @apply bg-red-50 text-red-700 ring-red-200/70; }
+.badge-high { @apply bg-coral-50 text-coral-700 ring-coral-200/70; }
+.badge-medium { @apply bg-amber-50 text-amber-700 ring-amber-200/70; }
+.badge-low { @apply bg-emerald-50 text-emerald-700 ring-emerald-200/70; }
+.badge-positive { @apply bg-emerald-50 text-emerald-700 ring-emerald-200/70; }
+.badge-neutral { @apply bg-slate-100 text-slate-700 ring-slate-200/70; }
+.badge-negative { @apply bg-red-50 text-red-700 ring-red-200/70; }
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-xl font-medium text-sm shadow-sm hover:shadow-md hover:from-primary-700 hover:to-primary-600 transition-all duration-200 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-medium text-sm shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-slate-200 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-slate-300; }
+
+/* Risk score circle animation */
+.score-circle {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
