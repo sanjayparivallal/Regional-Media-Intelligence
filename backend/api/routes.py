@@ -62,6 +62,58 @@ async def list_articles(
     return responses
 
 
+@articles_router.get("/mentions/all")
+async def list_all_mentions(
+    brand_id: Optional[uuid.UUID] = None,
+    sentiment: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """List detected brand mentions across all processed articles."""
+    query = (
+        select(Mention)
+        .options(
+            selectinload(Mention.brand),
+            selectinload(Mention.article).selectinload(Article.page).selectinload(Page.document).selectinload(Document.publication),
+        )
+        .order_by(desc(Mention.created_at))
+    )
+    if brand_id:
+        query = query.where(Mention.brand_id == brand_id)
+    if sentiment:
+        query = query.where(Mention.sentiment == sentiment)
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    mentions = result.scalars().all()
+    out = []
+    for m in mentions:
+        pub_name = "Regional Broadsheet"
+        page_num = 1
+        headline = ""
+        date_str = m.created_at.isoformat() if m.created_at else ""
+        if m.article:
+            headline = m.article.headline or (m.article.full_text[:100] if m.article.full_text else "")
+            if m.article.page:
+                page_num = m.article.page.page_number or 1
+                if m.article.page.document and m.article.page.document.publication:
+                    pub_name = m.article.page.document.publication.display_name or m.article.page.document.publication.name
+        out.append({
+            "id": str(m.id),
+            "brand_id": str(m.brand_id),
+            "brand_name": m.brand.display_name if m.brand else (m.brand.name if m.brand else "Unknown Brand"),
+            "headline": headline,
+            "snippet": m.context_snippet or m.matched_text or "",
+            "publication_name": pub_name,
+            "language": (m.article.detected_language if m.article else "hi") or "hi",
+            "sentiment": m.sentiment.value if hasattr(m.sentiment, "value") else str(m.sentiment or "neutral"),
+            "risk_score": m.risk_score or 0.0,
+            "date": date_str,
+            "page_number": page_num,
+        })
+    return out
+
+
 @articles_router.get("/{article_id}", response_model=ArticleDetail)
 async def get_article(article_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -250,15 +302,84 @@ async def get_coverage(db: AsyncSession = Depends(get_db)):
         for row in lang_result.all()
     ]
 
-    # Sentiment distribution
+    # Sentiment distribution (from Mentions)
     pos = (await db.execute(select(func.count()).select_from(Mention).where(Mention.sentiment == SentimentLabel.POSITIVE))).scalar() or 0
     neu = (await db.execute(select(func.count()).select_from(Mention).where(Mention.sentiment == SentimentLabel.NEUTRAL))).scalar() or 0
     neg = (await db.execute(select(func.count()).select_from(Mention).where(Mention.sentiment == SentimentLabel.NEGATIVE))).scalar() or 0
 
+    # Crisis topics: group by crisis_topic, count alerts, avg risk score
+    crisis_result = await db.execute(
+        select(
+            Alert.crisis_topic,
+            func.count().label("cnt"),
+            func.avg(Alert.risk_score).label("avg_risk"),
+        )
+        .where(Alert.crisis_topic.isnot(None), Alert.crisis_topic != "")
+        .group_by(Alert.crisis_topic)
+        .order_by(desc(func.count()))
+        .limit(10)
+    )
+    crisis_topics = [
+        CrisisTopicDistribution(
+            topic=row[0],
+            count=row[1],
+            avg_risk_score=round(row[2] or 0, 1),
+        )
+        for row in crisis_result.all()
+    ]
+
+    # Brand mentions summary: group Mentions by brand, count sentiment buckets + avg risk
+    brands_result = await db.execute(
+        select(Brand).options(selectinload(Brand.aliases)).where(Brand.active == True)
+    )
+    brands = brands_result.scalars().all()
+
+    brand_mentions_summary = []
+    for brand in brands:
+        total = (await db.execute(
+            select(func.count()).select_from(Mention).where(Mention.brand_id == brand.id)
+        )).scalar() or 0
+        if total == 0:
+            continue
+        b_pos = (await db.execute(
+            select(func.count()).select_from(Mention)
+            .where(Mention.brand_id == brand.id, Mention.sentiment == SentimentLabel.POSITIVE)
+        )).scalar() or 0
+        b_neu = (await db.execute(
+            select(func.count()).select_from(Mention)
+            .where(Mention.brand_id == brand.id, Mention.sentiment == SentimentLabel.NEUTRAL)
+        )).scalar() or 0
+        b_neg = (await db.execute(
+            select(func.count()).select_from(Mention)
+            .where(Mention.brand_id == brand.id, Mention.sentiment == SentimentLabel.NEGATIVE)
+        )).scalar() or 0
+        b_critical = (await db.execute(
+            select(func.count()).select_from(Alert)
+            .where(Alert.brand_id == brand.id, Alert.priority == AlertPriority.CRITICAL)
+        )).scalar() or 0
+        b_avg_risk = (await db.execute(
+            select(func.avg(Mention.risk_score)).where(Mention.brand_id == brand.id)
+        )).scalar() or 0.0
+        brand_mentions_summary.append(BrandMentionSummary(
+            brand_name=brand.display_name or brand.name,
+            total_mentions=total,
+            positive=b_pos,
+            neutral=b_neu,
+            negative=b_neg,
+            critical_alerts=b_critical,
+            avg_risk_score=round(b_avg_risk, 1),
+        ))
+
+    # Sort by total mentions desc
+    brand_mentions_summary.sort(key=lambda x: x.total_mentions, reverse=True)
+
     return CoverageAnalytics(
         language_coverage=lang_coverage,
         sentiment_distribution=SentimentDistribution(positive=pos, neutral=neu, negative=neg),
+        crisis_topics=crisis_topics,
+        brand_mentions=brand_mentions_summary[:10],
     )
+
 
 
 # === Audit ===
@@ -348,3 +469,30 @@ async def create_publication(data: PublicationCreate, db: AsyncSession = Depends
     await db.refresh(pub)
     await db.commit()
     return pub
+
+
+# === Incidents ===
+incidents_router = APIRouter(prefix="/incidents", tags=["Incidents"])
+
+
+@incidents_router.get("", response_model=list[IncidentResponse])
+async def list_incidents(
+    priority: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(Incident)
+        .options(selectinload(Incident.brand), selectinload(Incident.alerts))
+        .order_by(desc(Incident.max_risk_score))
+    )
+    if priority:
+        query = query.where(Incident.priority == priority)
+    if status:
+        query = query.where(Incident.status == status)
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    return result.scalars().all()
+

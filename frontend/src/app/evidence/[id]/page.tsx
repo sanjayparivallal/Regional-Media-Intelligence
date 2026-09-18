@@ -31,85 +31,9 @@ export default function EvidenceViewerPage() {
       try {
         const data = await api.getAlertEvidence(alertId);
         setEvidence(data);
-      } catch {
-        // Fallback demo evidence
-        setEvidence({
-          alert: {
-            id: alertId,
-            title: "Regulatory Action: RBI takes action against PayU",
-            priority: "critical",
-            risk_score: 91,
-            risk_breakdown: {
-              sentiment: { score: 28, max: 30 },
-              brand: { score: 24, max: 25 },
-              topic: { score: 18, max: 20 },
-              reach: { score: 13, max: 15 },
-              confidence: { score: 8, max: 10 },
-              total: 91,
-              priority: "critical",
-            },
-            brand_name: "PayU",
-            publication_name: "Dainik Jagran",
-            page_number: 1,
-            language: "hi",
-            sentiment: "negative",
-            sentiment_confidence: 91,
-            crisis_topic: "regulatory_action",
-          },
-          article: {
-            headline: "PayU पर RBI की कार्रवाई: डिजिटल भुगतान कंपनी पर लगा प्रतिबंध",
-            body_text:
-              "भारतीय रिजर्व बैंक ने PayU फाइनेंस पर नए ग्राहकों को जोड़ने पर रोक लगा दी है। RBI ने कहा कि कंपनी ने KYC नियमों का उल्लंघन किया है।",
-            full_text:
-              "PayU पर RBI की कार्रवाई: डिजिटल भुगतान कंपनी पर लगा प्रतिबंध भारतीय रिजर्व बैंक ने PayU फाइनेंस पर नए ग्राहकों को जोड़ने पर रोक लगा दी है।",
-            detected_language: "hi",
-            ocr_confidence: 92.5,
-            bbox_x: 50,
-            bbox_y: 80,
-            bbox_width: 900,
-            bbox_height: 280,
-          },
-          page: {
-            page_number: 1,
-            width: 2480,
-            height: 3508,
-            ocr_confidence: 92.5,
-            ocr_engine_used: "hybrid(paddleocr)",
-          },
-          document: {
-            filename: "Dainik_Jagran_2024.pdf",
-            original_filename: "Dainik_Jagran_2024_Sep_10.pdf",
-          },
-          translations: [
-            {
-              source_language: "hi",
-              translated_text:
-                "RBI takes action against PayU: Ban imposed on digital payment company. The Reserve Bank of India has banned PayU Finance from onboarding new customers. RBI stated that the company violated KYC regulations.",
-              confidence: 91,
-            },
-          ],
-          entities: [
-            { text: "PayU", entity_type: "ORGANIZATION", confidence: 0.98 },
-            { text: "RBI", entity_type: "REGULATOR", confidence: 0.97 },
-            { text: "Reserve Bank of India", entity_type: "REGULATOR", confidence: 0.96 },
-          ],
-          audit_trail: [
-            { action: "document_uploaded", stage: "upload", processing_time_ms: 0, created_at: new Date(Date.now() - 300000).toISOString() },
-            { action: "pdf_classified", stage: "pdf_classification", processing_time_ms: 1200, created_at: new Date(Date.now() - 290000).toISOString() },
-            { action: "pages_rendered", stage: "page_rendering", processing_time_ms: 3500, created_at: new Date(Date.now() - 280000).toISOString() },
-            { action: "ocr_completed", stage: "ocr", processing_time_ms: 15000, created_at: new Date(Date.now() - 260000).toISOString() },
-            { action: "layout_analyzed", stage: "layout_analysis", processing_time_ms: 2800, created_at: new Date(Date.now() - 240000).toISOString() },
-            { action: "articles_extracted", stage: "article_extraction", processing_time_ms: 1500, created_at: new Date(Date.now() - 230000).toISOString() },
-            { action: "language_detected", stage: "language_detection", processing_time_ms: 200, created_at: new Date(Date.now() - 225000).toISOString() },
-            { action: "translation_completed", stage: "translation", processing_time_ms: 8500, created_at: new Date(Date.now() - 210000).toISOString() },
-            { action: "entities_extracted", stage: "entity_detection", processing_time_ms: 1200, created_at: new Date(Date.now() - 200000).toISOString() },
-            { action: "brands_matched", stage: "brand_matching", processing_time_ms: 300, created_at: new Date(Date.now() - 195000).toISOString() },
-            { action: "sentiment_analyzed", stage: "sentiment_analysis", processing_time_ms: 2100, created_at: new Date(Date.now() - 190000).toISOString() },
-            { action: "crisis_classified", stage: "crisis_analysis", processing_time_ms: 800, created_at: new Date(Date.now() - 185000).toISOString() },
-            { action: "risk_score_calculated", stage: "risk_scoring", processing_time_ms: 100, created_at: new Date(Date.now() - 183000).toISOString() },
-            { action: "alert_generated", stage: "alert_generation", processing_time_ms: 50, created_at: new Date(Date.now() - 182000).toISOString() },
-          ],
-        });
+      } catch (e: any) {
+        console.error("Failed to load evidence:", e);
+        // evidence stays null — the component will show "not found"
       }
       setLoading(false);
     }
@@ -125,7 +49,21 @@ export default function EvidenceViewerPage() {
   }
 
   if (!evidence) {
-    return <div>Evidence record not found</div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-4">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-900">Evidence record not found</h2>
+        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+          This alert ID does not have an associated evidence dossier, or the record may have been deleted.
+        </p>
+        <Link href="/alerts" className="btn-primary text-xs mt-5 inline-flex items-center gap-1.5">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Alerts
+        </Link>
+      </div>
+    );
   }
 
   const { alert, article, page, document: doc, translations, entities, audit_trail } = evidence;

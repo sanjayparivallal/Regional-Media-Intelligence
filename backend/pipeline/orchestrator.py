@@ -99,10 +99,6 @@ class ModelOrchestrator:
 
     def get_translation_provider(self):
         """Get the best available translation provider."""
-        if settings.demo_mode:
-            from pipeline.nlp.translation.fallback_provider import FallbackTranslationProvider
-            return FallbackTranslationProvider()
-
         try:
             from pipeline.nlp.translation.nllb_provider import NLLBTranslationProvider
             provider = NLLBTranslationProvider(settings.translation_model)

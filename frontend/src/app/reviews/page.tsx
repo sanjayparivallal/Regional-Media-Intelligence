@@ -23,31 +23,11 @@ export default function ReviewsPage() {
   useEffect(() => {
     async function load() {
       try {
-        setReviews(await api.getReviews());
+        const data = await api.getReviews();
+        setReviews(data || []);
       } catch (e) {
-        console.warn("Could not load reviews from API, showing fallback demo data:", e);
-        setReviews([
-          {
-            id: "demo-r1",
-            review_type: "quality",
-            reason: "OCR confidence 72% on headline boundary",
-            priority: "high",
-            confidence: 72,
-            status: "pending",
-            ai_output: { ocr_confidence: 72, language: "ta" },
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: "demo-r2",
-            review_type: "translation",
-            reason: "Ambiguous regulatory phrasing detected in Hindi broadsheet",
-            priority: "medium",
-            confidence: 81,
-            status: "pending",
-            ai_output: { source_lang: "hi", target_lang: "en", bleu_score: 0.84 },
-            created_at: new Date().toISOString(),
-          },
-        ]);
+        console.warn("Could not load reviews from API:", e);
+        setReviews([]);
       } finally {
         setLoading(false);
       }

@@ -11,6 +11,10 @@ import {
   X,
   CheckCircle2,
   Search,
+  Trash2,
+  PowerOff,
+  Power,
+  Loader2,
 } from "lucide-react";
 
 export default function BrandsPage() {
@@ -99,6 +103,33 @@ export default function BrandsPage() {
       ]);
       setShowCreate(false);
       setNewBrand({ name: "", display_name: "", industry: "", keywords: "" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this brand profile and all associated data? This cannot be undone.")) return;
+    try {
+      await api.deleteBrand(id);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBrands((prev) => prev.filter((b) => b.id !== id));
+    }
+  };
+
+  const handleToggleActive = async (id: string, currentActive: boolean) => {
+    // Optimistic update
+    setBrands((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, active: !currentActive } : b))
+    );
+    try {
+      await api.updateBrand(id, { active: !currentActive });
+    } catch (e) {
+      console.error(e);
+      // Revert on failure
+      setBrands((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, active: currentActive } : b))
+      );
     }
   };
 
@@ -301,6 +332,32 @@ export default function BrandsPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Card Footer: Actions */}
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                onClick={() => handleToggleActive(brand.id, brand.active)}
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all border cursor-pointer ${
+                  brand.active
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                }`}
+                title={brand.active ? "Pause monitoring" : "Resume monitoring"}
+              >
+                {brand.active ? (
+                  <><PowerOff className="w-3.5 h-3.5" /><span>Pause</span></>
+                ) : (
+                  <><Power className="w-3.5 h-3.5" /><span>Resume</span></>
+                )}
+              </button>
+              <button
+                onClick={() => handleDelete(brand.id)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                title="Delete brand profile"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         ))}

@@ -43,66 +43,44 @@ interface OverviewStats {
   active_brands: number;
 }
 
+interface LangCoverage {
+  language: string;
+  count: number;
+  percentage: number;
+}
+
+const LANG_NAMES: Record<string, { name: string; color: string }> = {
+  hi: { name: "Hindi (हिन्दी)", color: "from-primary-500 to-indigo-500" },
+  ta: { name: "Tamil (தமிழ்)", color: "from-cyan-500 to-teal-400" },
+  te: { name: "Telugu (తెలుగు)", color: "from-violet-500 to-purple-500" },
+  en: { name: "English", color: "from-emerald-500 to-teal-500" },
+  mr: { name: "Marathi (मराठी)", color: "from-amber-500 to-orange-400" },
+  bn: { name: "Bengali (বাংলা)", color: "from-rose-500 to-pink-400" },
+};
+
 export default function OverviewPage() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [langCoverage, setLangCoverage] = useState<LangCoverage[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("today");
 
   useEffect(() => {
     async function load() {
       try {
-        const [statsData, alertsData] = await Promise.all([
+        const [statsData, alertsData, coverageData] = await Promise.all([
           api.getOverview(),
           api.getAlerts({ limit: "5" }),
+          api.getCoverage(),
         ]);
         setStats(statsData);
         setAlerts(alertsData);
+        setLangCoverage(coverageData?.language_coverage || []);
       } catch (e) {
-        console.warn("API unavailable, falling back to overview demo data:", e);
-        // Fallback demo data
-        setStats({
-          documents_processed: 12,
-          pages_processed: 47,
-          articles_detected: 156,
-          brand_mentions: 23,
-          critical_alerts: 3,
-          high_alerts: 7,
-          pending_reviews: 5,
-          active_brands: 12,
-        });
-        setAlerts([
-          {
-            id: "demo-1",
-            title: "Regulatory Action: RBI takes action against PayU",
-            summary:
-              "Reserve Bank of India has placed restrictions on PayU Finance from onboarding new digital payment customers due to compliance audit findings.",
-            priority: "critical",
-            risk_score: 91,
-            brand_name: "PayU",
-            publication_name: "Dainik Jagran",
-            language: "hi",
-            page_number: 1,
-            sentiment: "negative",
-            crisis_topic: "regulatory_action",
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: "demo-2",
-            title: "Merchant Gateway Downtime Reports in Southern Region",
-            summary:
-              "Retail trader unions reported POS machine transaction dropouts in Tier 2 markets during weekend shopping hours.",
-            priority: "high",
-            risk_score: 68,
-            brand_name: "Paytm",
-            publication_name: "Dinamalar",
-            language: "ta",
-            page_number: 4,
-            sentiment: "negative",
-            crisis_topic: "service_outage",
-            created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-          },
-        ]);
+        console.error("Failed to load dashboard data:", e);
+        setStats(null);
+        setAlerts([]);
+        setLangCoverage([]);
       }
       setLoading(false);
     }
@@ -111,38 +89,27 @@ export default function OverviewPage() {
 
   if (loading) return <LoadingSkeleton />;
 
-  const brandMatrix = [
-    {
-      name: "PayU",
-      mentions: 5,
-      risk: 91,
-      status: "critical",
-      positive: 0,
-      neutral: 1,
-      negative: 4,
-      trend: "+3 alerts today",
-    },
-    {
-      name: "Paytm",
-      mentions: 3,
-      risk: 68,
-      status: "high",
-      positive: 1,
-      neutral: 1,
-      negative: 1,
-      trend: "Elevated risk",
-    },
-    {
-      name: "PhonePe",
-      mentions: 2,
-      risk: 12,
-      status: "low",
-      positive: 2,
-      neutral: 0,
-      negative: 0,
-      trend: "Favorable coverage",
-    },
-  ];
+  // Build brand matrix from real alerts
+  const brandMatrix = Array.from(
+    alerts.reduce((acc: Map<string, any>, alert: any) => {
+      if (!alert.brand_name) return acc;
+      if (!acc.has(alert.brand_name)) {
+        acc.set(alert.brand_name, { name: alert.brand_name, mentions: 0, risk: 0, positive: 0, neutral: 0, negative: 0 });
+      }
+      const b = acc.get(alert.brand_name)!;
+      b.mentions += 1;
+      b.risk = Math.max(b.risk, alert.risk_score || 0);
+      if (alert.sentiment === 'positive') b.positive += 1;
+      else if (alert.sentiment === 'negative') b.negative += 1;
+      else b.neutral += 1;
+      return acc;
+    }, new Map())
+  ).map(([, b]: [string, any]) => ({
+    ...b,
+    status: b.risk >= 80 ? 'critical' : b.risk >= 50 ? 'high' : 'low',
+  }));
+
+  const topAlert = alerts[0] || null;
 
   return (
     <div className="space-y-7 animate-fade-in pb-10">
@@ -208,15 +175,24 @@ export default function OverviewPage() {
               <span className="text-[11px] font-bold uppercase tracking-wider text-red-100 bg-white/15 px-2 py-0.5 rounded-full inline-block mb-2">
                 Top Severity Risk
               </span>
-              <p className="text-4xl font-extrabold tracking-tight">91<span className="text-lg font-normal text-red-200">/100</span></p>
+              <p className="text-4xl font-extrabold tracking-tight">
+                {topAlert ? Math.round(topAlert.risk_score || 0) : 0}
+                <span className="text-lg font-normal text-red-200">/100</span>
+              </p>
             </div>
             <div className="p-2.5 bg-white/20 backdrop-blur-md rounded-xl text-white">
               <ShieldAlert className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-white/20">
-            <p className="text-xs font-bold text-white truncate">PayU: RBI KYC Ban</p>
-            <p className="text-[11px] text-red-100 mt-0.5">Dainik Jagran • Page 1</p>
+            {topAlert ? (
+              <>
+                <p className="text-xs font-bold text-white truncate">{topAlert.brand_name}: {topAlert.title?.split(':')[1]?.trim() || topAlert.title}</p>
+                <p className="text-[11px] text-red-100 mt-0.5">{topAlert.publication_name} • Page {topAlert.page_number}</p>
+              </>
+            ) : (
+              <p className="text-xs text-red-200">No critical threats detected</p>
+            )}
           </div>
         </div>
 
@@ -297,9 +273,11 @@ export default function OverviewPage() {
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-medium">Gazetteer Precision:</span>
-            <span className="font-bold text-emerald-600 font-mono">98.4% Match</span>
-          </div>
+                <span className="text-slate-500 font-medium">Gazetteer Precision:</span>
+                <span className="font-bold text-emerald-600 font-mono">
+                  {stats?.active_brands ? `${stats.active_brands} Active` : "No brands"}
+                </span>
+              </div>
         </div>
       </div>
 
@@ -520,24 +498,34 @@ export default function OverviewPage() {
             </div>
 
             <div className="space-y-3.5">
-              {[
-                { name: "Hindi (हिन्दी)", count: 89, percent: 57, color: "from-primary-500 to-indigo-500" },
-                { name: "Tamil (தமிழ்)", count: 42, percent: 27, color: "from-cyan-500 to-teal-400" },
-                { name: "Telugu (తెలుగు)", count: 25, percent: 16, color: "from-violet-500 to-purple-500" },
-              ].map((lang) => (
-                <div key={lang.name} className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-800">{lang.name}</span>
-                    <span className="text-slate-500 font-mono">{lang.percent}%</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full bg-gradient-to-r ${lang.color} rounded-full transition-all duration-700`}
-                      style={{ width: `${lang.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+              {langCoverage.length > 0 ? (
+                langCoverage.map((lang) => {
+                  const info = LANG_NAMES[lang.language] || {
+                    name: lang.language.toUpperCase(),
+                    color: "from-slate-400 to-slate-500",
+                  };
+                  return (
+                    <div key={lang.language} className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-slate-800">{info.name}</span>
+                        <span className="text-slate-500 font-mono">
+                          {lang.count} ({lang.percentage}%)
+                        </span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full bg-gradient-to-r ${info.color} rounded-full transition-all duration-700`}
+                          style={{ width: `${lang.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-4">
+                  No language data yet — process an edition to see coverage.
+                </p>
+              )}
             </div>
 
             <Link

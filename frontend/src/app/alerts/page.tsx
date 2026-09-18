@@ -33,35 +33,9 @@ export default function AlertsPage() {
         if (filters.language) params.language = filters.language;
         const data = await api.getAlerts(params);
         setAlerts(data);
-      } catch {
-        setAlerts([
-          {
-            id: "demo-1",
-            title: "Regulatory Action: RBI takes action against PayU",
-            summary:
-              "Critical regulatory action detected. RBI has banned PayU Finance from onboarding new customers due to KYC violations.",
-            priority: "critical",
-            risk_score: 91,
-            brand_name: "PayU",
-            publication_name: "Dainik Jagran",
-            language: "hi",
-            page_number: 1,
-            sentiment: "negative",
-            sentiment_confidence: 91,
-            crisis_topic: "regulatory_action",
-            risk_breakdown: {
-              sentiment: { score: 28, max: 30 },
-              brand: { score: 24, max: 25 },
-              topic: { score: 18, max: 20 },
-              reach: { score: 13, max: 15 },
-              confidence: { score: 8, max: 10 },
-              total: 91,
-              priority: "critical",
-            },
-            created_at: new Date().toISOString(),
-            status: "active",
-          },
-        ]);
+      } catch (e) {
+        console.error("Failed to load alerts:", e);
+        setAlerts([]);
       }
       setLoading(false);
     }
@@ -188,10 +162,12 @@ export default function AlertsPage() {
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {new Date(alert.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {alert.created_at
+                          ? new Date(alert.created_at).toLocaleString("en-IN", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : "—"}
                       </span>
                     </div>
                   </div>

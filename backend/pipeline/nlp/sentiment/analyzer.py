@@ -9,11 +9,66 @@ Compares results from original language and translated text.
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Module-level singleton for the transformer pipeline.
+# Loaded at most once per process — prevents repeated "Loading weights" spam
+# when processing multiple documents in the same server session.
+# ──────────────────────────────────────────────────────────────────────────────
+_TRANSFORMER_PIPELINE = None
+_TRANSFORMER_ATTEMPTED = False
+
+
+def _get_transformer_pipeline():
+    """Return the shared transformer pipeline, loading it on the first call."""
+    global _TRANSFORMER_PIPELINE, _TRANSFORMER_ATTEMPTED
+    if _TRANSFORMER_ATTEMPTED:
+        return _TRANSFORMER_PIPELINE
+    _TRANSFORMER_ATTEMPTED = True
+    # Suppress tqdm/transformers loading progress bars
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    try:
+        from transformers import pipeline, logging as hf_logging
+        from transformers.utils.logging import disable_progress_bar
+        from pathlib import Path
+        from config import get_settings
+        
+        # Silence transformers library logger so weight-loading bars are hidden
+        hf_logging.set_verbosity_error()
+        disable_progress_bar()
+        
+        settings = get_settings()
+        local_path = (
+            Path(settings.classification_model_path)
+            if settings.classification_model_path
+            else Path(__file__).resolve().parent.parent.parent.parent
+            / "model_assets" / "sentiment"
+        )
+        model_target = str(local_path) if local_path.exists() else settings.sentiment_model
+        
+        import torch
+        device_id = 0 if torch.cuda.is_available() else -1
+        
+        _TRANSFORMER_PIPELINE = pipeline(
+            "sentiment-analysis",
+            model=model_target,
+            top_k=3,
+            device=device_id,
+        )
+        logger.info(f"Loaded sentiment model from {model_target} (device={device_id})")
+    except Exception as e:
+        logger.warning(f"Sentiment transformer not available: {e}")
+        _TRANSFORMER_PIPELINE = None
+    return _TRANSFORMER_PIPELINE
+
 
 
 @dataclass
@@ -31,33 +86,7 @@ class SentimentAnalyzer:
     """Multi-model sentiment analysis with disagreement detection."""
 
     def __init__(self):
-        self._transformer_pipeline = None
-        self._transformer_loaded = False
-
-    def _load_transformer(self):
-        """Lazy-load XLM-RoBERTa sentiment model."""
-        if self._transformer_loaded:
-            return
-        self._transformer_loaded = True
-        try:
-            from transformers import pipeline
-            from pathlib import Path
-            from config import get_settings
-            settings = get_settings()
-            local_path = Path(settings.classification_model_path) if settings.classification_model_path else Path(__file__).resolve().parent.parent.parent.parent / "model_assets" / "sentiment"
-            model_target = str(local_path) if local_path.exists() else settings.sentiment_model
-            import torch
-            device_id = 0 if torch.cuda.is_available() else -1
-            self._transformer_pipeline = pipeline(
-                "sentiment-analysis",
-                model=model_target,
-                top_k=3,
-                device=device_id,
-            )
-            logger.info(f"Loaded sentiment model from {model_target} (device={device_id})")
-        except Exception as e:
-            logger.warning(f"Sentiment transformer not available: {e}")
-            self._transformer_pipeline = None
+        pass  # Transformer pipeline is a module-level singleton
 
     def analyze(
         self,
@@ -96,13 +125,13 @@ class SentimentAnalyzer:
         return result
 
     def _analyze_transformer(self, text: str) -> Optional[SentimentResult]:
-        """Analyze using XLM-RoBERTa."""
-        self._load_transformer()
-        if not self._transformer_pipeline:
+        """Analyze using XLM-RoBERTa (uses module-level singleton pipeline)."""
+        pipe = _get_transformer_pipeline()
+        if not pipe:
             return None
 
         try:
-            results = self._transformer_pipeline(text[:512])[0]  # Limit input length
+            results = pipe(text[:512])[0]  # Limit input length
 
             scores = {"positive": 0, "neutral": 0, "negative": 0}
             for r in results:

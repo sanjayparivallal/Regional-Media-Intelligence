@@ -6,6 +6,12 @@ Main entry point. Mounts all API routes and serves static files.
 
 import os
 import sys
+
+# Suppress transformers/tqdm weight-loading progress bars globally
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -31,11 +37,6 @@ async def lifespan(app: FastAPI):
 
     settings.ensure_directories()
     await init_db()
-
-    # Seed demo data if in demo mode
-    if settings.demo_mode:
-        from seed.demo_data import seed_demo_data
-        await seed_demo_data()
 
     # Clean up any orphaned running jobs from prior restarts
     try:
@@ -85,7 +86,7 @@ from api.alerts import router as alerts_router
 from api.routes import (
     articles_router, reviews_router, brands_router,
     analytics_router, audit_router, search_router,
-    publications_router,
+    publications_router, incidents_router,
 )
 
 app.include_router(documents_router, prefix="/api")
@@ -97,6 +98,7 @@ app.include_router(analytics_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
 app.include_router(publications_router, prefix="/api")
+app.include_router(incidents_router, prefix="/api")
 
 # Serve storage files (page images, uploads)
 storage_path = Path(settings.storage_path)

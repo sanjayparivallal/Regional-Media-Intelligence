@@ -124,7 +124,7 @@ class EasyOCRProvider(OCRProvider):
 
             return OCRResult(
                 text=full_text, boxes=boxes, confidence=avg_conf,
-                word_count=len(texts), engine=self.name,
+                word_count=len(full_text.split()), engine=self.name,
                 language=language, processing_time_ms=elapsed,
             )
 

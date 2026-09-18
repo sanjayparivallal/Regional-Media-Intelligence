@@ -15,13 +15,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, delete
+from sqlalchemy import select, func, desc, delete, update
 from sqlalchemy.orm import selectinload
 
 from database import get_db
 from config import get_settings
 from models.document import Document, Page, Article, ProcessingJob, DocumentStatus
-from models.intelligence import Alert, Mention, Translation, Entity
+from models.intelligence import Alert, Mention, Translation, Entity, Incident
 from models.review import Review, AuditLog
 from schemas.document import DocumentResponse, DocumentDetail, PageSummary, ProcessingJobResponse
 
@@ -224,14 +224,15 @@ async def cancel_processing(document_id: uuid.UUID, db: AsyncSession = Depends(g
     doc.status = DS.FAILED
     doc.error_message = "Cancelled by user"
 
-    # Mark latest running job as failed
-    job_result = await db.execute(
+    # Mark all active/queued/running jobs for this document as failed
+    jobs_result = await db.execute(
         select(ProcessingJob)
-        .where(ProcessingJob.document_id == document_id)
-        .order_by(desc(ProcessingJob.created_at))
+        .where(
+            ProcessingJob.document_id == document_id,
+            ProcessingJob.status.in_(["queued", "running"])
+        )
     )
-    job = job_result.scalar_one_or_none()
-    if job and job.status in ("queued", "running"):
+    for job in jobs_result.scalars().all():
         job.status = "failed"
         job.error_message = "Cancelled by user"
 
@@ -241,46 +242,76 @@ async def cancel_processing(document_id: uuid.UUID, db: AsyncSession = Depends(g
 
 @router.delete("/{document_id}")
 async def delete_document(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Delete a document and all its associated data."""
+    """Delete a document and all its associated data (files, pages, articles, alerts, etc.)."""
     result = await db.execute(select(Document).where(Document.id == document_id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(404, "Document not found")
 
-    # Clean up page images and thumbnails from disk
+    # 1. Clean up entire page images directory for this document
+    try:
+        page_dir = Path(settings.page_image_path) / str(document_id)
+        if page_dir.exists():
+            shutil.rmtree(page_dir, ignore_errors=True)
+    except Exception:
+        pass
+
+    # Clean up individual page files if stored outside document directory
     pages_result = await db.execute(select(Page).where(Page.document_id == document_id))
     pages = pages_result.scalars().all()
     for p in pages:
         for img_path in (p.image_path, p.thumbnail_path):
-            if img_path:
+            if img_path and img_path != "demo":
                 try:
                     Path(img_path).unlink(missing_ok=True)
                 except Exception:
                     pass
 
-    # Delete the physical document file if it exists
+    # 2. Delete the physical uploaded document file if it exists
     try:
-        file_path = Path(doc.file_path)
-        file_path.unlink(missing_ok=True)
+        if doc.file_path and doc.file_path != "demo":
+            fp = Path(doc.file_path)
+            if fp.exists():
+                fp.unlink(missing_ok=True)
+            else:
+                # Try relative to upload_path
+                upload_fp = Path(settings.upload_path) / fp.name
+                if upload_fp.exists():
+                    upload_fp.unlink(missing_ok=True)
     except Exception:
         pass
 
-    # Find all articles for this document to delete their dependents
+    # 3. Find all articles for this document to delete their dependents
     articles_result = await db.execute(select(Article.id).where(Article.document_id == document_id))
     article_ids = articles_result.scalars().all()
 
-    # Delete audit logs for this document
+    # Delete audit logs explicitly for this document
     await db.execute(delete(AuditLog).where(AuditLog.document_id == document_id))
 
     if article_ids:
         # Alerts referencing these articles
-        alerts_result = await db.execute(select(Alert.id).where(Alert.article_id.in_(article_ids)))
-        alert_ids = alerts_result.scalars().all()
+        alerts_result = await db.execute(select(Alert).where(Alert.article_id.in_(article_ids)))
+        alerts = alerts_result.scalars().all()
+        alert_ids = [a.id for a in alerts]
+        incident_ids = [a.incident_id for a in alerts if a.incident_id]
 
         if alert_ids:
             await db.execute(delete(AuditLog).where(AuditLog.alert_id.in_(alert_ids)))
             await db.execute(delete(Review).where(Review.alert_id.in_(alert_ids)))
             await db.execute(delete(Alert).where(Alert.id.in_(alert_ids)))
+
+        # Clean up or update orphaned incidents
+        if incident_ids:
+            for inc_id in set(incident_ids):
+                remaining_count = (await db.execute(
+                    select(func.count()).select_from(Alert).where(Alert.incident_id == inc_id)
+                )).scalar() or 0
+                if remaining_count == 0:
+                    await db.execute(delete(Incident).where(Incident.id == inc_id))
+                else:
+                    await db.execute(
+                        update(Incident).where(Incident.id == inc_id).values(alert_count=remaining_count)
+                    )
 
         await db.execute(delete(AuditLog).where(AuditLog.article_id.in_(article_ids)))
         await db.execute(delete(Review).where(Review.article_id.in_(article_ids)))
@@ -293,7 +324,7 @@ async def delete_document(document_id: uuid.UUID, db: AsyncSession = Depends(get
     await db.execute(delete(ProcessingJob).where(ProcessingJob.document_id == document_id))
     await db.execute(delete(Page).where(Page.document_id == document_id))
 
-    # Delete the document record
+    # Finally delete the document record
     await db.delete(doc)
     await db.commit()
     return {"status": "deleted", "document_id": str(document_id)}

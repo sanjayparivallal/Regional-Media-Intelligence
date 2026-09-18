@@ -26,19 +26,9 @@ export default function DocumentsPage() {
     async function load() {
       try {
         setDocuments(await api.getDocuments());
-      } catch {
-        setDocuments([
-          {
-            id: "demo",
-            original_filename: "Dainik_Jagran_2024.pdf",
-            status: "completed",
-            page_count: 1,
-            file_size: 2500000,
-            document_type: "pdf_scanned",
-            processing_duration_ms: 120000,
-            created_at: new Date().toISOString(),
-          },
-        ]);
+      } catch (e) {
+        console.error("Failed to load documents:", e);
+        setDocuments([]);
       } finally {
         setLoading(false);
       }
@@ -144,6 +134,7 @@ export default function DocumentsPage() {
                 <th className="px-6 py-3.5">Pages</th>
                 <th className="px-6 py-3.5">Status</th>
                 <th className="px-6 py-3.5">Size</th>
+                <th className="px-6 py-3.5">Uploaded</th>
                 <th className="px-6 py-3.5">Processing Time</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
@@ -205,6 +196,14 @@ export default function DocumentsPage() {
                         ? `${(doc.file_size / 1024 / 1024).toFixed(1)} MB`
                         : "—"}
                     </td>
+                    <td className="px-6 py-4 text-xs text-slate-500">
+                      {doc.created_at
+                        ? new Date(doc.created_at).toLocaleString("en-IN", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "—"}
+                    </td>
                     <td className="px-6 py-4 text-xs text-slate-500 font-mono">
                       {doc.processing_duration_ms
                         ? `${(doc.processing_duration_ms / 1000).toFixed(1)}s`
@@ -234,7 +233,7 @@ export default function DocumentsPage() {
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-slate-400">
+                  <td colSpan={8} className="p-12 text-center text-slate-400">
                     <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-semibold text-slate-700">No documents found</p>
                     <p className="text-xs text-slate-400 mt-1">
