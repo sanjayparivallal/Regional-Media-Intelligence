@@ -1,0 +1,41 @@
+{
+  "weights": {
+    "sentiment_severity": {
+      "weight_percent": 30,
+      "description": "Impact based on sentiment polarity and confidence"
+    },
+    "brand_relevance": {
+      "weight_percent": 25,
+      "description": "Strength of brand match (exact, alias, fuzzy)"
+    },
+    "crisis_topic_severity": {
+      "weight_percent": 20,
+      "description": "Severity of the identified crisis topic"
+    },
+    "publication_reach": {
+      "weight_percent": 15,
+      "description": "Publication circulation and reach tier"
+    },
+    "ai_confidence": {
+      "weight_percent": 10,
+      "description": "Combined AI model confidence (OCR + translation)"
+    }
+  },
+  "severity_levels": {
+    "LOW": {"min": 0, "max": 30, "color": "#22c55e", "action": "monitor"},
+    "MEDIUM": {"min": 31, "max": 60, "color": "#f59e0b", "action": "review"},
+    "HIGH": {"min": 61, "max": 80, "color": "#f97316", "action": "escalate"},
+    "CRITICAL": {"min": 81, "max": 100, "color": "#ef4444", "action": "immediate_alert"}
+  },
+  "thresholds": {
+    "ocr_review_threshold": 90,
+    "translation_review_threshold": 90,
+    "alert_generation_minimum": 30,
+    "auto_escalation_minimum": 80
+  },
+  "sentiment_factors": {
+    "negative": 1.0,
+    "neutral": 0.3,
+    "positive": 0.05
+  }
+}

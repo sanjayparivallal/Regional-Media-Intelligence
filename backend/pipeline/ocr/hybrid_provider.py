@@ -64,8 +64,9 @@ class HybridOCRProvider(OCRProvider):
         if not results:
             return OCRResult(text="", confidence=0.0, engine="hybrid_failed")
 
-        # Select the best result
-        best = max(results, key=lambda r: r.confidence)
+        # Select the best result with non-empty text
+        valid_results = [r for r in results if r.text and r.text.strip()]
+        best = max(valid_results, key=lambda r: (r.confidence, r.word_count)) if valid_results else results[0]
         best.engine = f"hybrid({best.engine})"
 
         elapsed = int((time.time() - start) * 1000)

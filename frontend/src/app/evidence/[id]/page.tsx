@@ -194,26 +194,26 @@ export default function EvidenceViewerPage() {
           <div className="relative bg-slate-100 aspect-[3/4] flex items-center justify-center p-4">
             <div className="absolute inset-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden p-3">
               <div className="w-full h-full relative">
-                {/* Simulated newspaper columns */}
-                <div className="space-y-2 opacity-30">
-                  <div className="h-3 bg-slate-400 rounded w-3/4" />
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <div className="space-y-1">
-                      <div className="h-1.5 bg-slate-300 rounded w-full" />
-                      <div className="h-1.5 bg-slate-300 rounded w-5/6" />
-                      <div className="h-1.5 bg-slate-300 rounded w-full" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="h-1.5 bg-slate-300 rounded w-full" />
-                      <div className="h-1.5 bg-slate-300 rounded w-4/5" />
-                    </div>
+                {page && doc ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img 
+                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/documents/${doc.id}/pages/${page.page_number}/image`}
+                    alt={`Page ${page.page_number}`}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="none"><rect width="100" height="100" fill="%23f1f5f9"/><text x="50" y="50" font-family="sans-serif" font-size="10" fill="%2394a3b8" text-anchor="middle" dominant-baseline="middle">Image Not Available</text></svg>';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                    <span className="text-slate-400 text-xs">No image data</span>
                   </div>
-                </div>
+                )}
 
                 {/* Article highlight overlay */}
                 {article && (
                   <div
-                    className="absolute border-2 border-red-500 bg-red-500/15 rounded-md shadow-xs transition-all"
+                    className="absolute border-2 border-red-500 bg-red-500/15 shadow-xs transition-all mix-blend-multiply"
                     style={{
                       left: `${(article.bbox_x / (page?.width || 2480)) * 100}%`,
                       top: `${(article.bbox_y / (page?.height || 3508)) * 100}%`,
@@ -221,8 +221,8 @@ export default function EvidenceViewerPage() {
                       height: `${(article.bbox_height / (page?.height || 3508)) * 100}%`,
                     }}
                   >
-                    <div className="absolute -top-6 left-0 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold tracking-wider uppercase shadow-xs">
-                      Extracted Article
+                    <div className="absolute -top-6 left-0 bg-red-600 text-white text-[9px] px-2 py-0.5 rounded font-bold tracking-wider uppercase shadow-xs whitespace-nowrap">
+                      Extracted Content
                     </div>
                   </div>
                 )}

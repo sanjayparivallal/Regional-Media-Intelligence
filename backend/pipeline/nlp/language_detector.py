@@ -21,6 +21,7 @@ SCRIPT_RANGES = {
     "malayalam": (0x0D00, 0x0D7F),
     "gujarati": (0x0A80, 0x0AFF),
     "gurmukhi": (0x0A00, 0x0A7F),
+    "arabic": (0x0600, 0x06FF),
     "latin": (0x0041, 0x007A),
 }
 
@@ -33,6 +34,7 @@ SCRIPT_TO_LANG = {
     "malayalam": "ml",
     "gujarati": "gu",
     "gurmukhi": "pa",
+    "arabic": "ur",
     "latin": "en",
 }
 

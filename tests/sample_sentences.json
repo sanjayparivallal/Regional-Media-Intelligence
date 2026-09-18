@@ -1,0 +1,121 @@
+{
+  "test_sentences": {
+    "ta": {
+      "language": "Tamil",
+      "sentences": {
+        "normal_news": "சென்னையில் இன்று முக்கிய செய்திகள் வெளியாகியுள்ளன.",
+        "brand_mention": "PayU நிறுவனம் இந்தியாவில் புதிய சேவையை அறிமுகப்படுத்தியுள்ளது.",
+        "person_name": "நிர்மலா சீதாராமன் நிதி அறிக்கையை தாக்கல் செய்தார்.",
+        "organization": "Infosys நிறுவனம் புதிய ஒப்பந்தத்தை வென்றுள்ளது.",
+        "negative_news": "PayU மீது RBI நடவடிக்கை எடுத்துள்ளது.",
+        "regulatory_crisis": "RBI PayU நிறுவனத்திற்கு அபராதம் விதித்துள்ளது. KYC விதிமுறைகளை மீறியதாக குற்றம் சாட்டப்பட்டுள்ளது."
+      }
+    },
+    "hi": {
+      "language": "Hindi",
+      "sentences": {
+        "normal_news": "आज दिल्ली में महत्वपूर्ण समाचार प्रकाशित हुए हैं.",
+        "brand_mention": "PayU कंपनी ने भारत में नई सेवा शुरू की है.",
+        "person_name": "निर्मला सीतारमण ने बजट पेश किया.",
+        "organization": "Infosys ने नया अनुबंध जीता है.",
+        "negative_news": "PayU पर RBI ने कार्रवाई की है.",
+        "regulatory_crisis": "RBI ने PayU पर जुर्माना लगाया है। KYC नियमों के उल्लंघन का आरोप है।"
+      }
+    },
+    "bn": {
+      "language": "Bengali",
+      "sentences": {
+        "normal_news": "আজ কলকাতায় গুরুত্বপূর্ণ সংবাদ প্রকাশিত হয়েছে.",
+        "brand_mention": "PayU কোম্পানি ভারতে নতুন পরিষেবা চালু করেছে.",
+        "person_name": "নির্মলা সীতারামন বাজেট পেশ করেছেন.",
+        "organization": "TCS নতুন চুক্তি জিতেছে.",
+        "negative_news": "PayU-এর বিরুদ্ধে RBI ব্যবস্থা নিয়েছে.",
+        "regulatory_crisis": "RBI PayU-কে জরিমানা করেছে। KYC নিয়ম লঙ্ঘনের অভিযোগ।"
+      }
+    },
+    "mr": {
+      "language": "Marathi",
+      "sentences": {
+        "normal_news": "आज मुंबईत महत्त्वाच्या बातम्या प्रकाशित झाल्या आहेत.",
+        "brand_mention": "PayU कंपनीने भारतात नवीन सेवा सुरू केली आहे.",
+        "person_name": "निर्मला सीतारामन यांनी अर्थसंकल्प सादर केला.",
+        "organization": "Infosys ने नवीन करार जिंकला आहे.",
+        "negative_news": "PayU वर RBI ने कारवाई केली आहे.",
+        "regulatory_crisis": "RBI ने PayU वर दंड ठोठावला आहे. KYC नियमांचे उल्लंघन केल्याचा आरोप आहे."
+      }
+    },
+    "te": {
+      "language": "Telugu",
+      "sentences": {
+        "normal_news": "హైదరాబాద్‌లో ఈరోజు ముఖ్యమైన వార్తలు ప్రచురించబడ్డాయి.",
+        "brand_mention": "PayU సంస్థ భారతదేశంలో కొత్త సేవను ప్రారంభించింది.",
+        "person_name": "నిర్మలా సీతారామన్ బడ్జెట్‌ను సమర్పించారు.",
+        "organization": "TCS కొత్త ఒప్పందాన్ని గెలుచుకుంది.",
+        "negative_news": "PayU పై RBI చర్యలు తీసుకుంది.",
+        "regulatory_crisis": "RBI PayU కు జరిమానా విధించింది. KYC నిబంధనల ఉల్లంఘన ఆరోపణ."
+      }
+    },
+    "gu": {
+      "language": "Gujarati",
+      "sentences": {
+        "normal_news": "આજે અમદાવાદમાં મહત્વના સમાચાર પ્રકાશિત થયા છે.",
+        "brand_mention": "PayU કંપનીએ ભારતમાં નવી સેવા શરૂ કરી છે.",
+        "person_name": "નિર્મલા સીતારામને બજેટ રજૂ કર્યું.",
+        "organization": "Infosys એ નવો કરાર જીત્યો છે.",
+        "negative_news": "PayU પર RBI એ કાર્યવાહી કરી છે.",
+        "regulatory_crisis": "RBI એ PayU પર દંડ લગાવ્યો છે. KYC નિયમોના ઉલ્લંઘનનો આરોપ છે."
+      }
+    },
+    "ur": {
+      "language": "Urdu",
+      "sentences": {
+        "normal_news": "آج دہلی میں اہم خبریں شائع ہوئی ہیں۔",
+        "brand_mention": "PayU کمپنی نے بھارت میں نئی خدمات شروع کی ہیں۔",
+        "person_name": "نرملا سیتا رامن نے بجٹ پیش کیا۔",
+        "organization": "TCS نے نیا معاہدہ حاصل کیا ہے۔",
+        "negative_news": "PayU پر RBI نے کارروائی کی ہے۔",
+        "regulatory_crisis": "RBI نے PayU پر جرمانہ عائد کیا ہے۔ KYC قواعد کی خلاف ورزی کا الزام ہے۔"
+      }
+    },
+    "kn": {
+      "language": "Kannada",
+      "sentences": {
+        "normal_news": "ಬೆಂಗಳೂರಿನಲ್ಲಿ ಇಂದು ಪ್ರಮುಖ ಸುದ್ದಿಗಳು ಪ್ರಕಟವಾಗಿವೆ.",
+        "brand_mention": "PayU ಸಂಸ್ಥೆ ಭಾರತದಲ್ಲಿ ಹೊಸ ಸೇವೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿದೆ.",
+        "person_name": "ನಿರ್ಮಲಾ ಸೀತಾರಾಮನ್ ಬಜೆಟ್ ಮಂಡಿಸಿದ್ದಾರೆ.",
+        "organization": "Infosys ಹೊಸ ಒಪ್ಪಂದವನ್ನು ಗೆದ್ದಿದೆ.",
+        "negative_news": "PayU ಮೇಲೆ RBI ಕ್ರಮ ಕೈಗೊಂಡಿದೆ.",
+        "regulatory_crisis": "RBI PayU ಗೆ ದಂಡ ವಿಧಿಸಿದೆ. KYC ನಿಯಮಗಳ ಉಲ್ಲಂಘನೆ ಆರೋಪ."
+      }
+    },
+    "ml": {
+      "language": "Malayalam",
+      "sentences": {
+        "normal_news": "കൊച്ചിയിൽ ഇന്ന് പ്രധാന വാർത്തകൾ പ്രസിദ്ധീകരിച്ചു.",
+        "brand_mention": "PayU കമ്പനി ഇന്ത്യയിൽ പുതിയ സേവനം ആരംഭിച്ചു.",
+        "person_name": "നിർമല സീതാരാമൻ ബജറ്റ് അവതരിപ്പിച്ചു.",
+        "organization": "TCS പുതിയ കരാർ നേടി.",
+        "negative_news": "PayU-ക്കെതിരെ RBI നടപടി എടുത്തു.",
+        "regulatory_crisis": "RBI PayU-യ്ക്ക് പിഴ ചുമത്തി. KYC നിയമങ്ങൾ ലംഘിച്ചതായി ആരോപണം."
+      }
+    },
+    "en": {
+      "language": "English",
+      "sentences": {
+        "normal_news": "Important news has been published in Mumbai today.",
+        "brand_mention": "PayU has launched a new payment service in India.",
+        "person_name": "Nirmala Sitharaman presented the Union Budget.",
+        "organization": "Infosys has won a new contract worth 500 crore.",
+        "negative_news": "RBI has taken action against PayU for violations.",
+        "regulatory_crisis": "RBI has imposed a penalty on PayU. The company has been charged with KYC norm violations."
+      }
+    }
+  },
+  "entity_verification": {
+    "expected_entities": [
+      "PayU", "RBI", "Infosys", "TCS", "Nirmala Sitharaman",
+      "KYC", "Mumbai", "Delhi", "Chennai", "Hyderabad",
+      "Kolkata", "Ahmedabad", "Bengaluru", "Kochi"
+    ]
+  }
+}

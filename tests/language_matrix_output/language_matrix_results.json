@@ -1,0 +1,348 @@
+{
+  "ta": {
+    "language": "Tamil",
+    "code": "ta",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "ta",
+        "detected": "ta",
+        "confidence": 88.2,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI PayU has imposed a fine on the company. KYC has been accused of violating the rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 21.42,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "hi": {
+    "language": "Hindi",
+    "code": "hi",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "hi",
+        "detected": "hi",
+        "confidence": 80.0,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI has fined PayU. KYC is accused of breach of the rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 7.93,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "bn": {
+    "language": "Bengali",
+    "code": "bn",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "bn",
+        "detected": "bn",
+        "confidence": 82.6,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "The court has fined the _ENT_0__ for breach of the _ENT_2__ rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 8.14,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "mr": {
+    "language": "Marathi",
+    "code": "mr",
+    "tests": {
+      "language_detection": {
+        "status": "FAIL",
+        "expected": "mr",
+        "detected": "hi",
+        "confidence": 82.6,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI has fined PayU for violating KYC rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 13.49,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PARTIAL"
+  },
+  "te": {
+    "language": "Telugu",
+    "code": "te",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "te",
+        "detected": "te",
+        "confidence": 84.0,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI PayU has been fined for breach of KYC rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 12.48,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "gu": {
+    "language": "Gujarati",
+    "code": "gu",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "gu",
+        "detected": "gu",
+        "confidence": 81.0,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI has imposed a fine on PayU. KYC is accused of breach of the rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 9.74,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "ur": {
+    "language": "Urdu",
+    "code": "ur",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "ur",
+        "detected": "ur",
+        "confidence": 88.9,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI has imposed a fine on PayU. KYC is accused of violating the rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 9.06,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "kn": {
+    "language": "Kannada",
+    "code": "kn",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "kn",
+        "detected": "kn",
+        "confidence": 84.6,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI PayU has been fined for breach of KYC rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 7.41,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "ml": {
+    "language": "Malayalam",
+    "code": "ml",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "ml",
+        "detected": "ml",
+        "confidence": 84.0,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "translated_text": "RBI PayU was fined. KYC was alleged to have violated the rules.",
+        "confidence": null,
+        "confidence_source": "not_available",
+        "processing_time": 7.81,
+        "model_used": "nllb-200-distilled-600M"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "entities_found": [
+          "PayU",
+          "RBI",
+          "KYC"
+        ],
+        "placeholders": {
+          "<ENTITY_001>": "PayU",
+          "<ENTITY_002>": "RBI",
+          "<ENTITY_003>": "KYC"
+        },
+        "all_preserved": true
+      }
+    },
+    "overall": "PASS"
+  },
+  "en": {
+    "language": "English",
+    "code": "en",
+    "tests": {
+      "language_detection": {
+        "status": "PASS",
+        "expected": "en",
+        "detected": "en",
+        "confidence": 100.0,
+        "method": "unicode"
+      },
+      "translation": {
+        "status": "PASS",
+        "note": "English is the target language, no translation needed"
+      },
+      "entity_preservation": {
+        "status": "PASS",
+        "note": "English, no translation needed"
+      }
+    },
+    "overall": "PASS"
+  }
+}

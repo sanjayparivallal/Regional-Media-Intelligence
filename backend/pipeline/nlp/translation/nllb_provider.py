@@ -24,6 +24,7 @@ NLLB_LANG_MAP = {
     "kn": "kan_Knda",
     "ml": "mal_Mlym",
     "gu": "guj_Gujr",
+    "ur": "urd_Arab",
     "pa": "pan_Guru",
     "en": "eng_Latn",
 }
@@ -61,7 +62,11 @@ class NLLBTranslationProvider(TranslationProvider):
 
             from config import get_settings
             settings = get_settings()
-            local_path = Path(settings.translation_model_path) if settings.translation_model_path else Path(__file__).resolve().parent.parent.parent.parent / "model_assets" / "translation"
+
+            # Prefer local model directory
+            from pathlib import Path
+            local_model_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "models" / "indictrans2"
+            local_path = Path(settings.translation_model_path) if settings.translation_model_path else local_model_dir
             load_source = str(local_path) if local_path.exists() else (settings.translation_model or self.model_name)
 
             logger.info(f"Loading NLLB model from: {load_source}")

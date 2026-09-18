@@ -1,0 +1,118 @@
+{
+  "languages": {
+    "en": {
+      "name": "English",
+      "script": "Latin",
+      "enabled": true,
+      "easyocr_code": "en",
+      "nllb_code": "eng_Latn",
+      "ocr_provider": "easyocr",
+      "is_target_language": true,
+      "priority": 0
+    },
+    "hi": {
+      "name": "Hindi",
+      "script": "Devanagari",
+      "enabled": true,
+      "easyocr_code": "hi",
+      "nllb_code": "hin_Deva",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 1
+    },
+    "bn": {
+      "name": "Bengali",
+      "script": "Bengali",
+      "enabled": true,
+      "easyocr_code": "bn",
+      "nllb_code": "ben_Beng",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 2
+    },
+    "mr": {
+      "name": "Marathi",
+      "script": "Devanagari",
+      "enabled": true,
+      "easyocr_code": "mr",
+      "nllb_code": "mar_Deva",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 3
+    },
+    "te": {
+      "name": "Telugu",
+      "script": "Telugu",
+      "enabled": true,
+      "easyocr_code": "te",
+      "nllb_code": "tel_Telu",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 4
+    },
+    "ta": {
+      "name": "Tamil",
+      "script": "Tamil",
+      "enabled": true,
+      "easyocr_code": "ta",
+      "nllb_code": "tam_Taml",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 5
+    },
+    "gu": {
+      "name": "Gujarati",
+      "script": "Gujarati",
+      "enabled": true,
+      "easyocr_code": null,
+      "nllb_code": "guj_Gujr",
+      "ocr_provider": "paddleocr",
+      "ocr_note": "EasyOCR does not support Gujarati; PaddleOCR used as fallback",
+      "is_target_language": false,
+      "priority": 6
+    },
+    "ur": {
+      "name": "Urdu",
+      "script": "Arabic-derived",
+      "enabled": true,
+      "easyocr_code": "ur",
+      "nllb_code": "urd_Arab",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 7
+    },
+    "kn": {
+      "name": "Kannada",
+      "script": "Kannada",
+      "enabled": true,
+      "easyocr_code": "kn",
+      "nllb_code": "kan_Knda",
+      "ocr_provider": "easyocr",
+      "is_target_language": false,
+      "priority": 8
+    },
+    "ml": {
+      "name": "Malayalam",
+      "script": "Malayalam",
+      "enabled": true,
+      "easyocr_code": null,
+      "nllb_code": "mal_Mlym",
+      "ocr_provider": "paddleocr",
+      "ocr_note": "EasyOCR does not support Malayalam; PaddleOCR used as fallback",
+      "is_target_language": false,
+      "priority": 9
+    }
+  },
+  "default_target_language": "en",
+  "primary_languages": ["ta", "te", "mr", "bn", "hi"],
+  "ocr_settings": {
+    "easyocr_model_dir": "models/indic-ocr",
+    "download_enabled": true,
+    "gpu_enabled": true,
+    "confidence_threshold": 90
+  },
+  "translation_settings": {
+    "review_threshold": 90,
+    "max_text_length": 512
+  }
+}

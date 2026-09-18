@@ -1,0 +1,43 @@
+{
+  "project_name": "Regional Media Intelligence Agent",
+  "mode": "100% Offline / Local AI",
+  "device": "CPU / GPU Auto",
+  "indic_ocr": {
+    "model_dir": "d:/Vee_Project/models/indic-ocr",
+    "languages": ["en", "hi", "ta", "bn", "mr", "te", "ur", "kn"],
+    "backend": "EasyOCR Local Weights",
+    "weights": [
+      "craft_mlt_25k.pth",
+      "devanagari.pth",
+      "tamil.pth"
+    ],
+    "fallback_languages": {
+      "gu": "paddleocr",
+      "ml": "paddleocr"
+    }
+  },
+  "indictrans2": {
+    "model_dir": "d:/Vee_Project/models/indictrans2",
+    "model_type": "NLLB-200 Distilled 600M",
+    "supported_languages": {
+      "Tamil": "tam_Taml",
+      "Hindi": "hin_Deva",
+      "Bengali": "ben_Beng",
+      "Marathi": "mar_Deva",
+      "Telugu": "tel_Telu",
+      "Gujarati": "guj_Gujr",
+      "Urdu": "urd_Arab",
+      "Kannada": "kan_Knda",
+      "Malayalam": "mal_Mlym",
+      "English": "eng_Latn"
+    }
+  },
+  "lfm_reasoning": {
+    "backend": "Local Ollama API",
+    "endpoint": "http://localhost:11434/api/generate",
+    "model_name": "LiquidAI/lfm2.5-2.6b:q4_k_m",
+    "quantization": "Q4_K_M",
+    "max_tokens": 1024,
+    "temperature": 0.1
+  }
+}

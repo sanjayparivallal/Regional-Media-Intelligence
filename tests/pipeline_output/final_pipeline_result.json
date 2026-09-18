@@ -1,0 +1,20 @@
+{
+  "source_document": "sample_newspaper_page.png",
+  "ocr_extracted_text": "Todays News Important news has been published today PayU and RBI Update: Financial services regulation update.",
+  "translated_english_text": "Important news has been published today PayU and RBI Update: Financial services regulation update.",
+  "intelligence_analysis": {
+    "entities": [
+      "PayU",
+      "RBI"
+    ],
+    "sentiment": "Neutral",
+    "crisis_risk": "Low",
+    "summary": "An update from PayU and the Reserve Bank of India regarding financial services regulation."
+  },
+  "pipeline_metrics": {
+    "ocr_latency_sec": 13.79,
+    "translation_latency_sec": 15.55,
+    "reasoning_latency_sec": 3.26,
+    "total_latency_sec": 32.6
+  }
+}

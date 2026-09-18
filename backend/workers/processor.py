@@ -1,9 +1,9 @@
 """
 Background Document Processor.
 
-Processes documents through the complete AI pipeline:
-PDF → OCR → Layout → Article Extraction → Language → Translation →
-Entity → Brand → Sentiment → Crisis → Risk → Alert → Evidence
+Processes documents through the complete AI pipeline using the unified services layer:
+PDF → Preprocessing → OCR → Layout → Article Extraction → Language → 
+Translation → Entity → Brand → LFM (Sentiment/Crisis) → Risk → Alert → Evidence
 
 Updates processing job status at each stage for real-time progress tracking.
 """
@@ -14,38 +14,45 @@ import uuid
 import asyncio
 from datetime import datetime
 from pathlib import Path
+import json
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session
 from config import get_settings
-from models.document import Document, Page, Article, ProcessingJob, DocumentStatus, DocumentType
+from models.document import Document, Page, Article, ProcessingJob, DocumentStatus
 from models.intelligence import Translation, Entity, Mention, Alert, AlertPriority, SentimentLabel
 from models.review import Review, AuditLog
 from models.brand import Brand
-from pipeline.orchestrator import ModelOrchestrator
+
+# New unified services
+from services.pdf_service import PDFService
+from services.ocr_service import OCRService
+from services.image_preprocessing import ImagePreprocessingService
+from services.language_service import LanguageService
+from services.translation_service import TranslationService
+from services.entity_protection import EntityProtectionService
+from services.lfm_service import LFMService
+from services.confidence_service import ConfidenceService
+from services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Global orchestrator
-_orchestrator = None
 _processing_semaphore = asyncio.Semaphore(1)
 
-try:
-    import torch
-    torch.set_num_threads(2)
-except Exception:
-    pass
-
-
-def get_orchestrator() -> ModelOrchestrator:
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = ModelOrchestrator()
-    return _orchestrator
+# Service singletons for the worker
+_pdf_service = PDFService()
+_ocr_service = OCRService()
+_preprocessing_service = ImagePreprocessingService()
+_language_service = LanguageService()
+_translation_service = TranslationService()
+_entity_protection_service = EntityProtectionService()
+_lfm_service = LFMService()
+_confidence_service = ConfidenceService()
+_review_service = ReviewService()
 
 
 async def process_document_task(document_id: str, job_id: str):
@@ -70,52 +77,53 @@ async def process_document_task(document_id: str, job_id: str):
             job.started_at = datetime.utcnow()
             await db.commit()
 
-            orchestrator = get_orchestrator()
-
-            # ===== STAGE 1: PDF Classification =====
+            # ===== STAGE 1 & 2: PDF Classification & Rendering =====
             await _update_stage(db, job, "pdf_classification", "running", 5)
-            from pipeline.ingestion.pdf_classifier import classify_pdf
-            classification = classify_pdf(doc.file_path)
-            doc.document_type = classification.document_type
-            doc.page_count = classification.page_count
-            await _log_audit(db, doc.id, None, None, "pdf_classified", "pdf_classification",
-                             details={"type": classification.document_type, "pages": classification.page_count})
-            await _update_stage(db, job, "pdf_classification", "completed", 10)
-
-            # ===== STAGE 2: Page Rendering =====
-            await _update_stage(db, job, "page_rendering", "running", 12)
-            from pipeline.ingestion.page_renderer import render_pdf_pages
+            
             page_dir = Path(settings.page_image_path) / str(doc.id)
-            rendered_pages = render_pdf_pages(doc.file_path, str(page_dir))
+            pdf_result = await asyncio.to_thread(
+                _pdf_service.process_pdf,
+                doc.file_path,
+                str(page_dir),
+                300
+            )
+            
+            doc.document_type = pdf_result.document_type
+            doc.page_count = pdf_result.page_count
+            
+            await _log_audit(db, doc.id, None, None, "pdf_classified", "pdf_classification",
+                             details={"type": pdf_result.document_type, "pages": pdf_result.page_count})
+            await _update_stage(db, job, "pdf_classification", "completed", 10)
+            await _update_stage(db, job, "page_rendering", "running", 12)
 
-            for rp in rendered_pages:
+            # Save pages
+            db_pages = []
+            for rp in pdf_result.pages:
                 page = Page(
                     document_id=doc.id,
                     page_number=rp.page_number,
                     image_path=rp.image_path,
-                    thumbnail_path=rp.thumbnail_path,
+                    thumbnail_path=rp.image_path, # Simplify for now
                     width=rp.width,
                     height=rp.height,
-                    dpi=rp.dpi,
-                    has_text_layer=classification.pages[rp.page_number - 1].has_text if rp.page_number <= len(classification.pages) else False,
+                    dpi=300,
+                    has_text_layer=rp.has_text_layer,
                 )
                 db.add(page)
+                db_pages.append((page, rp))
 
             await db.flush()
             await _update_stage(db, job, "page_rendering", "completed", 18)
 
-            # Load all pages
-            pages = (await db.execute(
-                select(Page).where(Page.document_id == doc.id).order_by(Page.page_number)
-            )).scalars().all()
-
-            # Load brands for matching (eager load aliases to prevent MissingGreenlet lazy-loading error)
+            # Load brands for matching
             brand_result = await db.execute(
                 select(Brand).options(selectinload(Brand.aliases)).where(Brand.active == True)
             )
             brands = brand_result.scalars().all()
             brand_dicts = []
+            monitored_brand_names = []
             for b in brands:
+                monitored_brand_names.append(b.name)
                 brand_dicts.append({
                     "id": str(b.id),
                     "name": b.name,
@@ -126,90 +134,79 @@ async def process_document_task(document_id: str, job_id: str):
                 })
 
             # Process each page
-            total_pages = len(pages)
-            for page_idx, page in enumerate(pages):
+            total_pages = len(db_pages)
+            for page_idx, (page, render_info) in enumerate(db_pages):
                 progress_base = 20 + (page_idx / max(total_pages, 1)) * 60
 
-                # ===== STAGE 3: OCR =====
+                # ===== STAGE 3: OCR / Preprocessing =====
                 await _update_stage(db, job, "ocr", "running", progress_base)
-                import cv2
-                image = cv2.imread(page.image_path)
-
-                if image is None:
-                    logger.warning(f"Could not read page image: {page.image_path}")
-                    continue
-
-                # Detect language from any existing text
-                from pipeline.ocr.language_router import route_ocr_language
-                ocr_languages = route_ocr_language()
-
-                # Try OCR with preprocessing variants in background thread
-                from pipeline.ingestion.preprocessor import generate_preprocessing_variants, select_best_variant
-                variants = await asyncio.to_thread(generate_preprocessing_variants, image)
-
-                ocr_provider = orchestrator.get_ocr_provider()
-                best_result = None
-
-                if ocr_provider:
-                    ocr_results = []
-                    found_good_ocr = False
-                    for variant in variants[:2]:  # Try top 2 variants
-                        if found_good_ocr:
-                            break
-                        for lang in ocr_languages[:2]:  # Try top 2 languages
-                            try:
-                                result = await asyncio.to_thread(ocr_provider.ocr, variant.image, lang)
-                                if result.confidence > 0:
-                                    ocr_results.append({
-                                        "name": f"{variant.name}_{lang}",
-                                        "ocr_confidence": result.confidence,
-                                        "word_count": result.word_count,
-                                        "text": result.text,
-                                        "result": result,
-                                        "preprocessing": variant.name,
-                                    })
-                                    # If confidence and word count are solid, skip trying more variants on CPU
-                                    if result.confidence >= 65 and result.word_count >= 10:
-                                        found_good_ocr = True
-                                        break
-                            except Exception as e:
-                                logger.warning(f"OCR variant failed: {e}")
-                            await asyncio.sleep(0.05)
-                        await asyncio.sleep(0.05)
-
-                    if ocr_results:
-                        best = select_best_variant(ocr_results)
-                        if best:
-                            best_result = best.get("result")
-                            page.preprocessing_applied = best.get("preprocessing", "")
-
-                # Use demo fallback if OCR failed
-                if not best_result or not best_result.text:
-                    from pipeline.ocr.base import OCRResult
-                    if settings.demo_mode:
-                        best_result = _get_demo_ocr_result(page.page_number)
+                
+                # Check if we have native text layer first
+                if render_info.has_text_layer and render_info.extracted_text and len(render_info.extracted_text.strip()) > 20:
+                    page.ocr_raw_text = render_info.extracted_text
+                    page.ocr_confidence = 100.0
+                    page.ocr_word_count = len(render_info.extracted_text.split())
+                    page.ocr_engine_used = "native_pdf"
+                    page.ocr_language = "en"  # Will be detected properly later
+                    
+                    # Create dummy box for native text
+                    page.ocr_bounding_boxes = [{
+                        "points": [[0,0], [page.width, 0], [page.width, page.height], [0, page.height]],
+                        "text": render_info.extracted_text,
+                        "confidence": 100.0
+                    }]
+                else:
+                    # Adaptive preprocessing
+                    prep_image_path = await asyncio.to_thread(_preprocessing_service.preprocess, page.image_path)
+                    
+                    # Run OCR (auto-detect language or default to en for layout)
+                    ocr_result = await asyncio.to_thread(_ocr_service.process_page, prep_image_path, None)
+                    
+                    if ocr_result.status == "success":
+                        page.ocr_raw_text = ocr_result.text
+                        page.ocr_confidence = ocr_result.confidence or 0.0
+                        page.ocr_word_count = len(ocr_result.text.split()) if ocr_result.text else 0
+                        page.ocr_engine_used = ocr_result.engine
+                        page.ocr_language = ocr_result.language_hint
+                        page.ocr_bounding_boxes = ocr_result.bounding_boxes
                     else:
-                        best_result = OCRResult(text="", confidence=0.0, engine="none")
-
-                # Update page with OCR results
-                page.ocr_raw_text = best_result.text
-                page.ocr_confidence = best_result.confidence
-                page.ocr_word_count = best_result.word_count
-                page.ocr_engine_used = best_result.engine
-                page.ocr_language = best_result.language
-                page.ocr_bounding_boxes = [b.to_dict() for b in best_result.boxes] if best_result.boxes else []
+                        page.ocr_raw_text = ""
+                        page.ocr_confidence = 0.0
+                        page.ocr_word_count = 0
+                        page.ocr_engine_used = "failed"
+                        page.ocr_language = "unknown"
+                        page.ocr_bounding_boxes = []
 
                 await _log_audit(db, doc.id, None, None, "ocr_completed", "ocr",
-                    details={"engine": best_result.engine, "confidence": best_result.confidence,
-                             "words": best_result.word_count, "language": best_result.language})
+                    details={"engine": page.ocr_engine_used, "confidence": page.ocr_confidence,
+                             "words": page.ocr_word_count})
 
                 # ===== STAGE 4: Layout Analysis =====
                 await _update_stage(db, job, "layout_analysis", "running", progress_base + 5)
                 await asyncio.sleep(0.01)
                 from pipeline.layout.analyzer import analyze_layout
+                from pipeline.layout.analyzer import ExtractedArticle
 
                 ocr_box_dicts = page.ocr_bounding_boxes or []
                 extracted_articles = await asyncio.to_thread(analyze_layout, ocr_box_dicts, page.width or 2480, page.height or 3508)
+                
+                # Fallback if layout analysis fails
+                if not extracted_articles and page.ocr_raw_text:
+                    clean_txt = page.ocr_raw_text.strip()
+                    txt_words = clean_txt.split()
+                    if len(txt_words) >= 5:
+                        headline_str = " ".join(txt_words[:12]) if len(txt_words) >= 12 else clean_txt
+                        extracted_articles = [
+                            ExtractedArticle(
+                                headline=headline_str,
+                                body_text=clean_txt,
+                                full_text=clean_txt,
+                                word_count=len(txt_words),
+                                strategy="fallback_raw_text",
+                                confidence=60.0,
+                            )
+                        ]
+                
                 page.detected_columns = len(set(a.bbox_x // ((page.width or 2480) / 3) for a in extracted_articles)) if extracted_articles else 1
 
                 # ===== STAGE 5: Article Extraction =====
@@ -239,53 +236,90 @@ async def process_document_task(document_id: str, job_id: str):
                     )
 
                     # ===== STAGE 6: Language Detection =====
-                    from pipeline.nlp.language_detector import detect_language
-                    lang_result = detect_language(ext_article.full_text)
-                    article.detected_language = lang_result.language
-                    article.language_confidence = lang_result.confidence
-                    article.detected_script = lang_result.script
+                    lang_result = await asyncio.to_thread(_language_service.detect_multi, ext_article.full_text)
+                    article.detected_language = lang_result.primary.language
+                    article.language_confidence = lang_result.primary.confidence
+                    article.detected_script = lang_result.primary.script
 
-                    # ===== STAGE 7: Translation =====
+                    db.add(article)
+                    await db.flush()
+
+                    # ===== STAGE 7: Translation & Entity Protection =====
                     translated_text = ext_article.full_text
-                    translation_confidence = 100.0
+                    translation_confidence = None
+                    translation_source = "not_available"
 
-                    if lang_result.language != "en" and lang_result.confidence > 50:
-                        translator = orchestrator.get_translation_provider()
-                        # Pre-extract entities for protection
-                        from pipeline.nlp.translation.entity_protector import extract_potential_entities
-                        pre_entities = extract_potential_entities(ext_article.full_text)
-
+                    if article.detected_language != "en" and article.language_confidence > 50:
                         trans_result = await asyncio.to_thread(
-                            translator.translate,
+                            _translation_service.translate,
                             ext_article.full_text,
-                            lang_result.language,
+                            article.detected_language,
                             "en",
-                            pre_entities,
+                            monitored_brand_names
                         )
                         translated_text = trans_result.translated_text
                         translation_confidence = trans_result.confidence
-
-                        db.add(article)
-                        await db.flush()
+                        translation_source = trans_result.confidence_source
 
                         translation_record = Translation(
                             article_id=article.id,
-                            source_language=lang_result.language,
+                            source_language=article.detected_language,
                             source_text=ext_article.full_text,
                             translated_text=translated_text,
                             confidence=trans_result.confidence,
                             model_used=trans_result.model_used,
                             entities_protected=trans_result.entities_protected,
-                            needs_review=trans_result.confidence < 90,
+                            needs_review=trans_result.review_required,
                         )
                         db.add(translation_record)
-                    else:
-                        db.add(article)
-                        await db.flush()
 
-                    # ===== STAGE 8: Entity Detection =====
-                    entity_extractor = orchestrator.get_entity_extractor()
+                    # ===== STAGE 8: Entity Detection (Hybrid) =====
+                    # Use standard entity extractor for baseline
+                    from pipeline.nlp.entity.extractor import EntityExtractor
+                    entity_extractor = EntityExtractor()
                     detected_entities = await asyncio.to_thread(entity_extractor.extract, translated_text, "en")
+                    entity_texts = [e.text for e in detected_entities]
+
+                    # ===== STAGE 9: Brand Matching =====
+                    from pipeline.nlp.entity.brand_matcher import BrandMatcher
+                    brand_matcher = BrandMatcher()
+                    brand_matcher.load_brands(brand_dicts)
+                    brand_matches = brand_matcher.match(translated_text, entity_texts)
+
+                    # ===== STAGE 10: LFM Analysis (Sentiment/Crisis/Summary) =====
+                    if brand_matches:
+                        # Only run LFM if we found brands
+                        primary_brand = brand_matches[0].brand_name
+                        lfm_result = await asyncio.to_thread(
+                            _lfm_service.analyze,
+                            translated_text,
+                            entity_texts,
+                            primary_brand
+                        )
+                        
+                        lfm_status = lfm_result.status
+                        lfm_sentiment = lfm_result.sentiment.get("sentiment", "neutral")
+                        lfm_sent_conf = lfm_result.sentiment.get("confidence", 0.5) * 100
+                        lfm_crisis = lfm_result.crisis.get("crisis", False)
+                        lfm_crisis_topic = lfm_result.crisis.get("category", "general")
+                        lfm_crisis_severity = lfm_result.crisis.get("severity", 0.0)
+                        lfm_summary = lfm_result.summary
+
+                        # Add LFM verified entities
+                        if lfm_result.status == "success" and lfm_result.entities.get("entities"):
+                            for ent in lfm_result.entities["entities"]:
+                                if ent.get("verified") and ent.get("text") not in entity_texts:
+                                    detected_entities.append(
+                                        type('obj', (object,), {'text': ent["text"], 'entity_type': ent.get("type", "UNKNOWN"), 'confidence': 0.9, 'start': 0, 'end': 0, 'source': 'lfm', 'normalized': None})()
+                                    )
+                    else:
+                        lfm_status = "skipped"
+                        lfm_sentiment = "neutral"
+                        lfm_sent_conf = 0.0
+                        lfm_crisis = False
+                        lfm_crisis_topic = None
+                        lfm_crisis_severity = 0.0
+                        lfm_summary = ""
 
                     for ent in detected_entities:
                         entity_record = Entity(
@@ -295,50 +329,41 @@ async def process_document_task(document_id: str, job_id: str):
                             confidence=ent.confidence,
                             start_offset=ent.start,
                             end_offset=ent.end,
-                            detected_in="translated" if lang_result.language != "en" else "original",
+                            detected_in="translated" if article.detected_language != "en" else "original",
                             model_used=ent.source,
                             normalized_text=ent.normalized,
                         )
                         db.add(entity_record)
 
-                    # ===== STAGE 9: Brand Matching =====
-                    brand_matcher = orchestrator.get_brand_matcher()
-                    brand_matcher.load_brands(brand_dicts)
-                    entity_texts = [e.text for e in detected_entities]
-                    brand_matches = brand_matcher.match(translated_text, entity_texts)
-
-                    # ===== STAGE 10: Sentiment + Crisis + Risk for each brand match =====
-                    sentiment_analyzer = orchestrator.get_sentiment_analyzer()
-                    crisis_classifier = orchestrator.get_crisis_classifier()
-
-                    sentiment_result = await asyncio.to_thread(
-                        sentiment_analyzer.analyze,
-                        ext_article.full_text, translated_text, lang_result.language
-                    )
-
+                    # Calculate Risk & Create Mentions/Alerts
                     for brand_match in brand_matches:
-                        # Crisis classification
-                        crisis_result = await asyncio.to_thread(
-                            crisis_classifier.classify,
-                            translated_text,
-                            entities=entity_texts,
-                            sentiment_label=sentiment_result.label,
-                            sentiment_confidence=sentiment_result.confidence,
-                        )
-
-                        # Risk scoring
                         from pipeline.nlp.crisis.risk_scorer import calculate_risk_score
-                        risk = calculate_risk_score(
-                            sentiment_label=sentiment_result.label,
-                            sentiment_confidence=sentiment_result.confidence,
-                            brand_match_confidence=brand_match.confidence,
-                            crisis_severity=crisis_result.severity if crisis_result else 0.0,
-                            crisis_confidence=crisis_result.confidence if crisis_result else 0.0,
-                            publication_reach=0.7,  # TODO: get from publication
-                            overall_ai_confidence=min(page.ocr_confidence, translation_confidence) / 100,
+                        
+                        # Use aggregated confidence
+                        agg_conf = _confidence_service.aggregate(
+                            ocr_confidence=page.ocr_confidence,
+                            ocr_source="model" if page.ocr_engine_used != "native_pdf" else "native",
+                            language_confidence=article.language_confidence,
+                            language_source="model",
+                            translation_confidence=translation_confidence,
+                            translation_source=translation_source
                         )
 
-                        # Create mention
+                        avg_ai_conf = (
+                            ((agg_conf.ocr_confidence or 100) + 
+                             (agg_conf.translation_confidence or 100)) / 2
+                        ) / 100.0
+
+                        risk = calculate_risk_score(
+                            sentiment_label=lfm_sentiment,
+                            sentiment_confidence=lfm_sent_conf,
+                            brand_match_confidence=brand_match.confidence,
+                            crisis_severity=lfm_crisis_severity if lfm_crisis else 0.0,
+                            crisis_confidence=85.0 if lfm_crisis else 0.0,
+                            publication_reach=0.7, 
+                            overall_ai_confidence=avg_ai_conf * 100,
+                        )
+
                         mention = Mention(
                             article_id=article.id,
                             brand_id=uuid.UUID(brand_match.brand_id),
@@ -346,18 +371,18 @@ async def process_document_task(document_id: str, job_id: str):
                             match_type=brand_match.match_type,
                             match_confidence=brand_match.confidence,
                             context_snippet=brand_match.context_snippet,
-                            sentiment=SentimentLabel(sentiment_result.label),
-                            sentiment_confidence=sentiment_result.confidence,
-                            sentiment_model_used=sentiment_result.model_used,
-                            crisis_topic=crisis_result.topic if crisis_result else None,
-                            crisis_confidence=crisis_result.confidence if crisis_result else None,
+                            sentiment=SentimentLabel(lfm_sentiment),
+                            sentiment_confidence=lfm_sent_conf,
+                            sentiment_model_used="lfm2.5-2.6b",
+                            crisis_topic=lfm_crisis_topic if lfm_crisis else None,
+                            crisis_confidence=85.0 if lfm_crisis else None,
                             risk_score=risk.total,
                             risk_breakdown=risk.to_dict(),
                             risk_priority=AlertPriority(risk.priority),
                         )
                         db.add(mention)
 
-                        # Generate alert if risk warrants it
+                        # Generate alert
                         if risk.total >= 30:
                             from pipeline.alerting.generator import generate_alert
                             alert_data = generate_alert(
@@ -365,16 +390,19 @@ async def process_document_task(document_id: str, job_id: str):
                                 brand_id=brand_match.brand_id,
                                 brand_name=brand_match.brand_name,
                                 headline=ext_article.headline,
-                                crisis_topic=crisis_result.topic if crisis_result else "general",
+                                crisis_topic=lfm_crisis_topic if lfm_crisis else "general",
                                 risk_score=risk.total,
                                 risk_breakdown=risk.to_dict(),
-                                sentiment=sentiment_result.label,
-                                sentiment_confidence=sentiment_result.confidence,
+                                sentiment=lfm_sentiment,
+                                sentiment_confidence=lfm_sent_conf,
                                 publication_name="",
                                 page_number=page.page_number,
-                                language=lang_result.language,
-                                crisis_keywords=crisis_result.keywords_matched if crisis_result else [],
+                                language=article.detected_language,
+                                crisis_keywords=[],
                             )
+                            # Use LFM summary if available, else standard
+                            if lfm_summary:
+                                alert_data.summary = lfm_summary
 
                             alert = Alert(
                                 article_id=article.id,
@@ -399,28 +427,24 @@ async def process_document_task(document_id: str, job_id: str):
                             await _log_audit(db, doc.id, article.id, None, "alert_generated", "alert_generation",
                                 details={"brand": brand_match.brand_name, "risk_score": risk.total, "priority": risk.priority})
 
-                    # Check if article needs review
-                    if (page.ocr_confidence < settings.ocr_confidence_threshold or
-                        article.segmentation_confidence < 50 or
-                        (translation_confidence < 90 and lang_result.language != "en")):
-                        article.needs_review = True
-                        reasons = []
-                        if page.ocr_confidence < settings.ocr_confidence_threshold:
-                            reasons.append(f"OCR confidence {page.ocr_confidence:.0f}%")
-                        if article.segmentation_confidence < 50:
-                            reasons.append(f"segmentation confidence {article.segmentation_confidence:.0f}%")
-                        article.review_reason = "; ".join(reasons)
+                    # Human Review checking
+                    review_item = _review_service.should_review(
+                        ocr_confidence=page.ocr_confidence,
+                        translation_confidence=translation_confidence,
+                        segmentation_confidence=article.segmentation_confidence,
+                        lfm_status=lfm_status,
+                    )
 
+                    if review_item:
+                        article.needs_review = True
+                        article.review_reason = review_item.reason
+                        
                         review = Review(
                             article_id=article.id,
-                            review_type="quality",
-                            reason=article.review_reason,
-                            confidence=page.ocr_confidence,
-                            ai_output={
-                                "ocr_confidence": page.ocr_confidence,
-                                "segmentation_confidence": article.segmentation_confidence,
-                                "language": lang_result.language,
-                            },
+                            review_type=review_item.review_type,
+                            reason=review_item.reason,
+                            confidence=review_item.confidence,
+                            ai_output=review_item.ai_output,
                         )
                         db.add(review)
 
@@ -471,33 +495,3 @@ async def _log_audit(db, doc_id, article_id, alert_id, action, stage, **kwargs):
         **kwargs,
     )
     db.add(audit)
-
-
-def _get_demo_ocr_result(page_number: int):
-    """Generate demo OCR result for testing without real OCR."""
-    from pipeline.ocr.base import OCRResult, OCRBox
-
-    demo_texts = {
-        1: {
-            "text": "PayU पर RBI की कार्रवाई: डिजिटल भुगतान कंपनी पर लगा प्रतिबंध\n\nभारतीय रिजर्व बैंक ने PayU फाइनेंस पर नए ग्राहकों को जोड़ने पर रोक लगा दी है। RBI ने कहा कि कंपनी ने KYC नियमों का उल्लंघन किया है। PayU ने कहा कि वह RBI के निर्देशों का पालन करेगी और जल्द से जल्द सभी मुद्दों का समाधान करेगी।",
-            "boxes": [
-                {"x": 50, "y": 80, "width": 900, "height": 60, "text": "PayU पर RBI की कार्रवाई: डिजिटल भुगतान कंपनी पर लगा प्रतिबंध", "confidence": 92, "font_size_estimate": 60},
-                {"x": 50, "y": 200, "width": 900, "height": 30, "text": "भारतीय रिजर्व बैंक ने PayU फाइनेंस पर नए ग्राहकों को जोड़ने पर रोक लगा दी है।", "confidence": 89, "font_size_estimate": 30},
-                {"x": 50, "y": 250, "width": 900, "height": 30, "text": "RBI ने कहा कि कंपनी ने KYC नियमों का उल्लंघन किया है।", "confidence": 91, "font_size_estimate": 30},
-                {"x": 50, "y": 300, "width": 900, "height": 30, "text": "PayU ने कहा कि वह RBI के निर्देशों का पालन करेगी और जल्द से जल्द सभी मुद्दों का समाधान करेगी।", "confidence": 88, "font_size_estimate": 30},
-            ],
-            "language": "hi",
-        },
-    }
-
-    demo = demo_texts.get(page_number, demo_texts[1])
-    boxes = [OCRBox(**b) for b in demo["boxes"]]
-
-    return OCRResult(
-        text=demo["text"],
-        boxes=boxes,
-        confidence=90.0,
-        word_count=len(demo["text"].split()),
-        engine="demo",
-        language=demo["language"],
-    )

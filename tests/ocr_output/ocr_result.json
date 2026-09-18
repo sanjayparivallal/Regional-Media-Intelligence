@@ -1,0 +1,29 @@
+{
+  "status": "SUCCESS",
+  "device": "CPU",
+  "inference_seconds": 3.51,
+  "blocks": [
+    {
+      "text": "Lip\u091b LIDgBouni",
+      "confidence": 11.31,
+      "bounding_box": [
+        [
+          0,
+          1
+        ],
+        [
+          256,
+          1
+        ],
+        [
+          256,
+          37
+        ],
+        [
+          0,
+          37
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "language": "Tamil",
+    "source": "வணக்கம்! சென்னை மற்றும் தமிழக செய்திகளை உடனுக்குடன் தெரிந்து கொள்ளுங்கள்.",
+    "translation": "Get up to speed on the news in Chennai and Tamil Nadu.",
+    "latency_sec": 4.02
+  },
+  {
+    "language": "Hindi",
+    "source": "नमस्कार! आज की मुख्य समाचार और विश्लेषण पढ़ें।",
+    "translation": "Hello! Read today's main news and analysis.",
+    "latency_sec": 3.07
+  }
+]

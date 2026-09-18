@@ -1,0 +1,69 @@
+{
+  "brands": [
+    {
+      "name": "PayU",
+      "industry": "Fintech",
+      "aliases": ["Pay U", "PayU Finance", "PayU India"],
+      "keywords": ["digital payment", "online payment", "fintech"]
+    },
+    {
+      "name": "Infosys",
+      "industry": "IT Services",
+      "aliases": ["Infosys Ltd", "Infosys Limited", "Infosys Technologies"],
+      "keywords": ["IT services", "technology", "software"]
+    },
+    {
+      "name": "TCS",
+      "industry": "IT Services",
+      "aliases": ["Tata Consultancy Services", "Tata Consultancy", "TCS Ltd"],
+      "keywords": ["IT services", "consulting", "technology"]
+    },
+    {
+      "name": "Google",
+      "industry": "Technology",
+      "aliases": ["Google LLC", "Google India", "Alphabet"],
+      "keywords": ["search engine", "technology", "advertising"]
+    },
+    {
+      "name": "Microsoft",
+      "industry": "Technology",
+      "aliases": ["Microsoft Corp", "Microsoft India", "MSFT"],
+      "keywords": ["software", "cloud", "technology"]
+    },
+    {
+      "name": "Amazon",
+      "industry": "E-commerce",
+      "aliases": ["Amazon India", "Amazon.in", "AMZN"],
+      "keywords": ["e-commerce", "online shopping", "cloud services"]
+    },
+    {
+      "name": "Reliance",
+      "industry": "Conglomerate",
+      "aliases": ["Reliance Industries", "RIL", "Reliance Jio"],
+      "keywords": ["telecom", "retail", "energy"]
+    },
+    {
+      "name": "Paytm",
+      "industry": "Fintech",
+      "aliases": ["One97 Communications", "Paytm Payments Bank"],
+      "keywords": ["digital wallet", "payment", "fintech"]
+    },
+    {
+      "name": "Adani",
+      "industry": "Conglomerate",
+      "aliases": ["Adani Group", "Adani Enterprises", "Adani Ports"],
+      "keywords": ["infrastructure", "energy", "ports"]
+    },
+    {
+      "name": "HDFC Bank",
+      "industry": "Banking",
+      "aliases": ["HDFC", "HDFC Ltd"],
+      "keywords": ["banking", "finance", "loans"]
+    }
+  ],
+  "match_settings": {
+    "fuzzy_threshold": 0.85,
+    "case_insensitive": true,
+    "allow_regional_transliteration": true
+  }
+}

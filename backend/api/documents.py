@@ -181,6 +181,22 @@ async def get_document_pages(document_id: uuid.UUID, db: AsyncSession = Depends(
     return result.scalars().all()
 
 
+@router.get("/{document_id}/pages/{page_number}/image")
+async def get_page_image(document_id: uuid.UUID, page_number: int, db: AsyncSession = Depends(get_db)):
+    """Get the image file for a specific page."""
+    from fastapi.responses import FileResponse
+    result = await db.execute(
+        select(Page).where(
+            Page.document_id == document_id,
+            Page.page_number == page_number
+        )
+    )
+    page = result.scalar_one_or_none()
+    if not page or not page.image_path or not Path(page.image_path).exists():
+        raise HTTPException(404, "Page image not found")
+    return FileResponse(page.image_path)
+
+
 @router.get("/{document_id}/jobs", response_model=list[ProcessingJobResponse])
 async def get_document_jobs(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Get processing jobs for a document."""

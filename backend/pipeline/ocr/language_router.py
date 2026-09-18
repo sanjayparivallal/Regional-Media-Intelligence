@@ -18,6 +18,8 @@ SCRIPT_DETECTORS = {
     "bengali": {"range": (0x0980, 0x09FF), "languages": ["bn"]},
     "kannada": {"range": (0x0C80, 0x0CFF), "languages": ["kn"]},
     "malayalam": {"range": (0x0D00, 0x0D7F), "languages": ["ml"]},
+    "gujarati": {"range": (0x0A80, 0x0AFF), "languages": ["gu"]},
+    "arabic": {"range": (0x0600, 0x06FF), "languages": ["ur"]},
     "latin": {"range": (0x0041, 0x007A), "languages": ["en"]},
 }
 
@@ -109,6 +111,8 @@ def get_language_for_script(script: str) -> str:
         "bengali": "bn",
         "kannada": "kn",
         "malayalam": "ml",
+        "gujarati": "gu",
+        "arabic": "ur",
         "latin": "en",
     }
     return mapping.get(script, "en")

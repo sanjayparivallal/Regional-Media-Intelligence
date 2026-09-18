@@ -46,12 +46,15 @@ class SentimentAnalyzer:
             settings = get_settings()
             local_path = Path(settings.classification_model_path) if settings.classification_model_path else Path(__file__).resolve().parent.parent.parent.parent / "model_assets" / "sentiment"
             model_target = str(local_path) if local_path.exists() else settings.sentiment_model
+            import torch
+            device_id = 0 if torch.cuda.is_available() else -1
             self._transformer_pipeline = pipeline(
                 "sentiment-analysis",
                 model=model_target,
                 top_k=3,
+                device=device_id,
             )
-            logger.info(f"Loaded sentiment model from {model_target}")
+            logger.info(f"Loaded sentiment model from {model_target} (device={device_id})")
         except Exception as e:
             logger.warning(f"Sentiment transformer not available: {e}")
             self._transformer_pipeline = None

@@ -18,11 +18,15 @@ venv/
 env/
 
 # ML Models & Data
+models/
 backend/models_cache/
 *.pt
 *.pth
 *.onnx
 *.bin
+*.gguf
+*.safetensors
+.cache/
 !backend/seed/*.json
 
 # Storage

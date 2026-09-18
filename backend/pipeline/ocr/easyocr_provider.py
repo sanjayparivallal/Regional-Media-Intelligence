@@ -14,14 +14,19 @@ logger = logging.getLogger(__name__)
 
 LANG_MAP = {
     "en": ["en"],
-    "hi": ["hi", "en"],
-    "ta": ["ta", "en"],
-    "te": ["te", "en"],
-    "mr": ["mr", "en"],
-    "bn": ["bn", "en"],
-    "kn": ["kn", "en"],
+    "hi": ["hi"],
+    "ta": ["ta"],
+    "te": ["te"],
+    "mr": ["mr"],
+    "bn": ["bn"],
+    "kn": ["kn"],
+    "ur": ["ur"],
     "multi": ["en", "hi", "ta"],
 }
+
+# Local model storage path
+from pathlib import Path as _Path
+_MODEL_DIR = str(_Path(__file__).resolve().parent.parent.parent.parent / "models" / "indic-ocr")
 
 
 class EasyOCRProvider(OCRProvider):
@@ -33,6 +38,10 @@ class EasyOCRProvider(OCRProvider):
     @property
     def name(self) -> str:
         return "easyocr"
+
+    @property
+    def supported_languages(self):
+        return ["en", "hi", "ta", "te", "mr", "bn", "kn", "ur"]
 
     def is_available(self) -> bool:
         try:
@@ -53,7 +62,12 @@ class EasyOCRProvider(OCRProvider):
                     gpu = torch.cuda.is_available()
                 except ImportError:
                     pass
-                self._readers[key] = easyocr.Reader(list(lang_codes), gpu=gpu)
+                self._readers[key] = easyocr.Reader(
+                    list(lang_codes), gpu=gpu,
+                    model_storage_directory=_MODEL_DIR,
+                    download_enabled=True,
+                    verbose=False,
+                )
                 logger.info(f"Initialized EasyOCR reader for: {lang_codes}")
             except Exception as e:
                 logger.error(f"Failed to init EasyOCR: {e}")
