@@ -162,6 +162,10 @@ def _strategy_column_first(
             # New headline detected
             if box_height > headline_threshold and len(text) > 3:
                 if current_article:
+                    current_article.full_text = (
+                        (current_article.headline + " " if current_article.headline else "") +
+                        current_article.body_text
+                    ).strip()
                     current_article.word_count = len(current_article.full_text.split())
                     articles.append(current_article)
 

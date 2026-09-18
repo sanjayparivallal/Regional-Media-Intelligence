@@ -50,11 +50,12 @@ class TesseractProvider(OCRProvider):
             import pytesseract
             from PIL import Image
 
-            # Convert numpy to PIL
+            # Convert numpy to PIL (OpenCV loads as BGR, PIL expects RGB)
             if len(image.shape) == 2:
                 pil_image = Image.fromarray(image)
             else:
-                pil_image = Image.fromarray(image)
+                import cv2
+                pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
             lang_code = LANG_MAP.get(language, "eng")
 

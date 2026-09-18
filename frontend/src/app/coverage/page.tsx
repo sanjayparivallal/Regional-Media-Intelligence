@@ -225,7 +225,8 @@ export default function CoveragePage() {
             </div>
           </div>
           <div className="space-y-2.5">
-            {coverage?.crisis_topics?.map((topic: any) => (
+            {coverage?.crisis_topics?.length > 0 ? (
+              coverage.crisis_topics.map((topic: any) => (
               <div
                 key={topic.topic}
                 className="flex items-center justify-between p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors"
@@ -250,7 +251,14 @@ export default function CoveragePage() {
                   Avg Risk {Math.round(topic.avg_risk_score)}
                 </div>
               </div>
-            ))}
+            ))
+            ) : (
+              <div className="py-8 text-center">
+                <AlertTriangle className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No crisis topics detected yet.</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">Process newspaper editions to populate this section.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -270,7 +278,8 @@ export default function CoveragePage() {
             </div>
           </div>
           <div className="space-y-2.5">
-            {coverage?.brand_mentions?.map((brand: any) => (
+            {coverage?.brand_mentions?.length > 0 ? (
+              coverage.brand_mentions.map((brand: any) => (
               <div
                 key={brand.brand_name}
                 className="flex items-center justify-between p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors"
@@ -295,7 +304,14 @@ export default function CoveragePage() {
                   </span>
                 </div>
               </div>
-            ))}
+            ))
+            ) : (
+              <div className="py-8 text-center">
+                <Tag className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No brand mentions yet.</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">Configure brands and process editions to see sentiment data.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

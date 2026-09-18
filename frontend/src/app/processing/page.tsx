@@ -131,16 +131,7 @@ export default function ProcessingPage() {
       // Preserve existing documents if already loaded; only fallback if completely empty
       setDocuments(prev => {
         if (prev && prev.length > 0) return prev;
-        return [{
-          id: "demo",
-          filename: "demo_dainik_jagran.pdf",
-          original_filename: "Dainik_Jagran_2024.pdf",
-          status: "completed",
-          page_count: 1,
-          file_size: 2500000,
-          processing_duration_ms: 120000,
-          created_at: new Date().toISOString(),
-        }];
+        return [];
       });
     } finally {
       inFlightRef.current = false;
@@ -242,7 +233,7 @@ export default function ProcessingPage() {
             {hasActive ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                <span className="text-blue-700 font-semibold">Live Polling (5s)</span>
+                <span className="text-blue-700 font-semibold">Live Polling (8s)</span>
               </>
             ) : (
               <>

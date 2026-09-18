@@ -8,21 +8,49 @@ for robust entity extraction from both original and translated text.
 import logging
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Module-level spaCy singleton.
+# The model is loaded at most once per process lifetime, so the
+# "spaCy not available" warning (e.g. Windows DLL blocked by AppControl)
+# only appears once even if many EntityExtractor instances are created.
+# ──────────────────────────────────────────────────────────────────────────────
+_SPACY_MODEL = None
+_SPACY_ATTEMPTED = False
 
-@dataclass
-class DetectedEntity:
-    text: str
-    entity_type: str  # ORGANIZATION, PERSON, LOCATION, PRODUCT, REGULATOR, BRAND
-    confidence: float
-    start: int = 0
-    end: int = 0
-    source: str = "unknown"  # spacy, regex, gazetteer
-    normalized: Optional[str] = None
+
+def _get_spacy_model():
+    """Return the shared spaCy model, loading it on the first call."""
+    global _SPACY_MODEL, _SPACY_ATTEMPTED
+    if _SPACY_ATTEMPTED:
+        return _SPACY_MODEL
+    _SPACY_ATTEMPTED = True
+    try:
+        import spacy
+        from pathlib import Path
+        from config import get_settings
+        settings = get_settings()
+        local_path = (
+            Path(settings.ner_model_path)
+            if settings.ner_model_path
+            else Path(__file__).resolve().parent.parent.parent.parent
+            / "model_assets" / "spacy_en"
+        )
+        if local_path.exists():
+            _SPACY_MODEL = spacy.load(str(local_path))
+            logger.info(f"Loaded spaCy from local assets: {local_path}")
+        else:
+            _SPACY_MODEL = spacy.load(settings.spacy_model)
+            logger.info(f"Loaded spaCy {settings.spacy_model}")
+    except Exception as e:
+        # Log once at INFO; subsequent calls return None silently.
+        logger.info(f"Using default regex extraction (spaCy not available: {e})")
+        _SPACY_MODEL = None
+    return _SPACY_MODEL
 
 
 # Gazetteers for Indian entities
@@ -46,33 +74,19 @@ ORGANIZATIONS = [
 ]
 
 
+@dataclass
+class DetectedEntity:
+    text: str
+    entity_type: str  # ORGANIZATION, PERSON, LOCATION, PRODUCT, REGULATOR, BRAND
+    confidence: float
+    start: int = 0
+    end: int = 0
+    source: str = "unknown"  # spacy, regex, gazetteer
+    normalized: Optional[str] = None
+
+
 class EntityExtractor:
     """Hybrid entity extraction using multiple methods."""
-
-    def __init__(self):
-        self._spacy_model = None
-        self._spacy_loaded = False
-
-    def _load_spacy(self):
-        """Lazy-load spaCy model."""
-        if self._spacy_loaded:
-            return
-        self._spacy_loaded = True
-        try:
-            import spacy
-            from pathlib import Path
-            from config import get_settings
-            settings = get_settings()
-            local_path = Path(settings.ner_model_path) if settings.ner_model_path else Path(__file__).resolve().parent.parent.parent.parent / "model_assets" / "spacy_en"
-            if local_path.exists():
-                self._spacy_model = spacy.load(str(local_path))
-                logger.info(f"Loaded spaCy from local assets: {local_path}")
-            else:
-                self._spacy_model = spacy.load(settings.spacy_model)
-                logger.info(f"Loaded spaCy {settings.spacy_model}")
-        except Exception as e:
-            logger.warning(f"spaCy not available: {e}")
-            self._spacy_model = None
 
     def extract(self, text: str, language: str = "en") -> List[DetectedEntity]:
         """
@@ -86,16 +100,13 @@ class EntityExtractor:
         entities = []
 
         # Method 1: spaCy NER (for English/translated text)
-        spacy_entities = self._extract_spacy(text)
-        entities.extend(spacy_entities)
+        entities.extend(self._extract_spacy(text))
 
         # Method 2: Regex gazetteers
-        gazetteer_entities = self._extract_gazetteers(text)
-        entities.extend(gazetteer_entities)
+        entities.extend(self._extract_gazetteers(text))
 
         # Method 3: Pattern-based extraction
-        pattern_entities = self._extract_patterns(text)
-        entities.extend(pattern_entities)
+        entities.extend(self._extract_patterns(text))
 
         # Deduplicate
         entities = self._deduplicate(entities)
@@ -106,13 +117,13 @@ class EntityExtractor:
         return entities
 
     def _extract_spacy(self, text: str) -> List[DetectedEntity]:
-        """Extract entities using spaCy."""
-        self._load_spacy()
-        if not self._spacy_model:
+        """Extract entities using spaCy (uses module-level singleton)."""
+        model = _get_spacy_model()
+        if not model:
             return []
 
         try:
-            doc = self._spacy_model(text[:10000])  # Limit text length
+            doc = model(text[:10000])  # Limit text length
             entities = []
 
             type_map = {

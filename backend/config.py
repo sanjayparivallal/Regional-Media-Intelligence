@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = True
     secret_key: str = "change-me-in-production-use-a-real-secret"
-    demo_mode: bool = True
+    demo_mode: bool = False
 
     # --- Database ---
     database_url: str = "postgresql+asyncpg://rmi_user:saNjay*34@localhost:5432/rmi_db"

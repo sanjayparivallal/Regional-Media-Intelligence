@@ -18,64 +18,11 @@ export default function PublicationsPage() {
   useEffect(() => {
     async function load() {
       try {
-        setPubs(await api.getPublications());
-      } catch {
-        setPubs([
-          {
-            id: "1",
-            name: "Dainik Jagran",
-            language: "hi",
-            region: "North India",
-            state: "Uttar Pradesh & Delhi NCR",
-            reach_tier: 1,
-            estimated_circulation: 4000000,
-          },
-          {
-            id: "2",
-            name: "Dinamalar",
-            language: "ta",
-            region: "South India",
-            state: "Tamil Nadu",
-            reach_tier: 1,
-            estimated_circulation: 1500000,
-          },
-          {
-            id: "3",
-            name: "Amar Ujala",
-            language: "hi",
-            region: "North India",
-            state: "Uttar Pradesh & Uttarakhand",
-            reach_tier: 1,
-            estimated_circulation: 3000000,
-          },
-          {
-            id: "4",
-            name: "Dainik Bhaskar",
-            language: "hi",
-            region: "Central & Western India",
-            state: "Madhya Pradesh & Rajasthan",
-            reach_tier: 1,
-            estimated_circulation: 4500000,
-          },
-          {
-            id: "5",
-            name: "Eenadu",
-            language: "te",
-            region: "South India",
-            state: "Andhra Pradesh & Telangana",
-            reach_tier: 1,
-            estimated_circulation: 1800000,
-          },
-          {
-            id: "6",
-            name: "Lokmat",
-            language: "mr",
-            region: "Western India",
-            state: "Maharashtra",
-            reach_tier: 1,
-            estimated_circulation: 2200000,
-          },
-        ]);
+        const data = await api.getPublications();
+        setPubs(data || []);
+      } catch (e) {
+        console.warn("Could not load publications:", e);
+        setPubs([]);
       }
       setLoading(false);
     }

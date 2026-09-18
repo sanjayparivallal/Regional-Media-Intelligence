@@ -21,7 +21,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     if (!res.ok) {
       let errorMsg: string;
       try {
-        const errorData = await res.json();
+        const errorData = await res.clone().json();
         errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
       } catch {
         errorMsg = await res.text();
@@ -126,6 +126,18 @@ export const api = {
 
   // Search
   search: (query: string) => fetchAPI<any>(`/search?q=${encodeURIComponent(query)}`),
+
+  // Mentions
+  getMentions: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return fetchAPI<any[]>(`/articles/mentions/all${query}`);
+  },
+
+  // Incidents
+  getIncidents: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return fetchAPI<any[]>(`/incidents${query}`);
+  },
 
   // System
   getSystemInfo: () => fetchAPI<any>('/system/info'),
