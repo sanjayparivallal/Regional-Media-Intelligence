@@ -1,9 +1,11 @@
-# Environment
+# Environment & Secrets
 .env
 .env.local
 .env.*.local
+backend/.env
+frontend/.env*
 
-# Python
+# Python & Caches
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,38 +18,77 @@ build/
 venv/
 .venv/
 env/
+.mypy_cache/
+.ruff_cache/
 
-# ML Models & Data
+# Databases & Runtime Data
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+data/
+backend/data/
+storage/
+backend/storage/
+uploads/
+backend/uploads/
+*.xlsx
+*.tmp.xlsx
+!backend/seed/*.json
+
+# ML Models & Large Assets
 models/
+model_assets/
+dist_models/
 backend/models_cache/
+backend/model_assets/
+backend/dist_models/
 *.pt
 *.pth
 *.onnx
 *.bin
 *.gguf
 *.safetensors
+*.tar.gz
 .cache/
-!backend/seed/*.json
 
-# Storage
-storage/
-uploads/
+# Testing Codes, Scripts & Test Artifacts
+test_*.py
+*_test.py
+test_temp.*
+backend/test_temp.*
+test_*.png
+test_*.jpg
+test_*.jpeg
+test_*.pdf
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Node.js
+# Node.js & Frontend Build Outputs
 node_modules/
 .next/
 out/
 frontend/.next/
 frontend/node_modules/
+frontend/out/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# IDE
+# IDE & Editor Configs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.gemini/
+.agents/
 
-# OS
+# OS Artifacts
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -55,12 +96,8 @@ desktop.ini
 # Docker
 docker-compose.override.yml
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-
 # Logs
 *.log
 logs/
+backend/logs/
+

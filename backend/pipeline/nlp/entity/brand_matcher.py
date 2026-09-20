@@ -121,6 +121,8 @@ def _fuzzy_match(
     try:
         from rapidfuzz import fuzz, process
 
+        cutoff_score = threshold if threshold > 1.0 else (threshold * 100.0)
+
         # Extract candidate words/phrases from text
         words = text.split()
         # Check single words and bigrams
@@ -131,7 +133,7 @@ def _fuzzy_match(
         result = process.extractOne(
             brand_name, candidates,
             scorer=fuzz.ratio,
-            score_cutoff=threshold * 100,
+            score_cutoff=cutoff_score,
         )
 
         if result:

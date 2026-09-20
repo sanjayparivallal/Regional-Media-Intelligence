@@ -23,17 +23,43 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    let isSubscribed = true;
     async function load() {
       try {
-        setDocuments(await api.getDocuments());
+        const data = await api.getDocuments();
+        const unique = (data || []).filter((d: any, idx: number, arr: any[]) =>
+          arr.findIndex((item: any) => item.id === d.id) === idx
+        );
+        if (isSubscribed) setDocuments(unique);
       } catch (e) {
         console.error("Failed to load documents:", e);
-        setDocuments([]);
+        if (isSubscribed) setDocuments([]);
       } finally {
-        setLoading(false);
+        if (isSubscribed) setLoading(false);
       }
     }
     load();
+
+    const intervalId = setInterval(() => {
+      setDocuments((prev) => {
+        if (prev.some((d) => d.status === "PROCESSING" || d.status === "UPLOADED")) {
+          api.getDocuments().then((data) => {
+            if (isSubscribed) {
+              const unique = (data || []).filter((d: any, idx: number, arr: any[]) =>
+                arr.findIndex((item: any) => item.id === d.id) === idx
+              );
+              setDocuments(unique);
+            }
+          }).catch(console.error);
+        }
+        return prev;
+      });
+    }, 2000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -96,7 +122,7 @@ export default function DocumentsPage() {
         <div className="kpi-card emerald">
           <p className="text-xs font-semibold text-slate-500 uppercase">Completed</p>
           <p className="text-2xl font-extrabold text-emerald-600 mt-1">
-            {documents.filter((d) => d.status === "completed").length}
+            {documents.filter((d) => d.status === "COMPLETED").length}
           </p>
           <p className="text-[11px] text-slate-400 mt-0.5">Fully indexed</p>
         </div>
@@ -132,22 +158,21 @@ export default function DocumentsPage() {
                 <th className="px-6 py-3.5">Document</th>
                 <th className="px-6 py-3.5">Type</th>
                 <th className="px-6 py-3.5">Pages</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Size</th>
+                <th className="px-6 py-3.5">Status & Progress</th>
+                <th className="px-6 py-3.5">Sentiment</th>
                 <th className="px-6 py-3.5">Uploaded</th>
-                <th className="px-6 py-3.5">Processing Time</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((doc) => {
-                const isCompleted = doc.status === "completed";
-                const isProcessing = doc.status === "processing";
-                const isFailed = doc.status === "failed";
+              {filtered.map((doc, idx) => {
+                const isCompleted = doc.status === "COMPLETED";
+                const isProcessing = doc.status === "PROCESSING";
+                const isFailed = doc.status === "FAILED";
 
                 return (
                   <tr
-                    key={doc.id}
+                    key={`${doc.id}-${idx}`}
                     className="hover:bg-slate-50/60 transition-colors group"
                   >
                     <td className="px-6 py-4">
@@ -174,27 +199,69 @@ export default function DocumentsPage() {
                       {doc.page_count || 1}
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`badge ${
-                          isCompleted
-                            ? "badge-low"
-                            : isProcessing
-                            ? "bg-cyan-50 text-cyan-700 ring-cyan-200/70"
-                            : isFailed
-                            ? "badge-critical"
-                            : "badge-neutral"
-                        }`}
-                      >
-                        {isCompleted && <CheckCircle2 className="w-3 h-3" />}
-                        {isProcessing && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {isFailed && <AlertCircle className="w-3 h-3" />}
-                        {doc.status}
-                      </span>
+                      {isProcessing ? (
+                        <div className="w-52">
+                          {/* Phase label */}
+                          {(() => {
+                            const stage = (doc.current_stage || "").toLowerCase();
+                            const pct = Math.round(doc.progress_percent || 0);
+                            let phaseNum = 1, phaseColor = "text-violet-700", barColor = "bg-violet-500", bgColor = "bg-violet-100";
+                            if (stage.includes("phase 2") || stage.includes("translat")) {
+                              phaseNum = 2; phaseColor = "text-amber-700"; barColor = "bg-amber-500"; bgColor = "bg-amber-100";
+                            } else if (stage.includes("phase 3") || stage.includes("sentiment")) {
+                              phaseNum = 3; phaseColor = "text-emerald-700"; barColor = "bg-emerald-500"; bgColor = "bg-emerald-100";
+                            }
+                            const labels = ["OCR Scan", "Translating", "Sentiment"];
+                            return (
+                              <>
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className={`text-[10px] font-bold uppercase ${phaseColor}`}>
+                                    Phase {phaseNum}: {labels[phaseNum - 1]}
+                                  </span>
+                                  <span className={`text-[10px] font-bold ${phaseColor}`}>{pct}%</span>
+                                </div>
+                                <div className={`w-full ${bgColor} rounded-full h-1.5 overflow-hidden`}>
+                                  <div className={`${barColor} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                </div>
+                                <div className="flex gap-1 mt-1.5">
+                                  {[1, 2, 3].map(n => (
+                                    <div key={n} className={`flex-1 h-0.5 rounded-full ${
+                                      n < phaseNum ? "bg-slate-400" : n === phaseNum ? barColor : "bg-slate-200"
+                                    }`} />
+                                  ))}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <span
+                          className={`badge ${
+                            isCompleted
+                              ? "badge-low"
+                              : isFailed
+                              ? "badge-critical"
+                              : "badge-neutral"
+                          }`}
+                        >
+                          {isCompleted && <CheckCircle2 className="w-3 h-3" />}
+                          {isFailed && <AlertCircle className="w-3 h-3" />}
+                          {doc.status}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 font-mono">
-                      {doc.file_size
-                        ? `${(doc.file_size / 1024 / 1024).toFixed(1)} MB`
-                        : "—"}
+                    <td className="px-6 py-4">
+                      {doc.overall_sentiment ? (
+                        <span className={`px-2 py-1 text-[11px] font-bold rounded-lg ${
+                          doc.overall_sentiment === "NEGATIVE" ? "bg-red-50 text-red-700" :
+                          doc.overall_sentiment === "POSITIVE" ? "bg-emerald-50 text-emerald-700" :
+                          "bg-slate-100 text-slate-700"
+                        }`}>
+                          {doc.overall_sentiment}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {doc.created_at
@@ -202,11 +269,6 @@ export default function DocumentsPage() {
                             dateStyle: "short",
                             timeStyle: "short",
                           })
-                        : "—"}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 font-mono">
-                      {doc.processing_duration_ms
-                        ? `${(doc.processing_duration_ms / 1000).toFixed(1)}s`
                         : "—"}
                     </td>
                     <td className="px-6 py-4 text-right">

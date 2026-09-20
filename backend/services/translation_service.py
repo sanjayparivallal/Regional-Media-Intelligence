@@ -75,11 +75,12 @@ class TranslationService:
             from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
             import torch
 
-            model_path = str(MODEL_DIR) if MODEL_DIR.exists() else "facebook/nllb-200-distilled-600M"
-            logger.info(f"Loading translation model from: {model_path}")
+            is_local = MODEL_DIR.exists()
+            model_path = str(MODEL_DIR) if is_local else "facebook/nllb-200-distilled-600M"
+            logger.info(f"Loading translation model from: {model_path} (offline/local_files_only={is_local})")
 
-            self._tokenizer = AutoTokenizer.from_pretrained(model_path)
-            self._model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+            self._tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=is_local)
+            self._model = AutoModelForSeq2SeqLM.from_pretrained(model_path, local_files_only=is_local)
 
             if torch.cuda.is_available():
                 self._model = self._model.cuda()

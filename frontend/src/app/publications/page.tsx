@@ -81,9 +81,9 @@ export default function PublicationsPage() {
 
       {/* Publications Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {pubs.map((pub) => (
+        {pubs.map((pub, idx) => (
           <div
-            key={pub.id}
+            key={`${pub.id}-${idx}`}
             className="glass-card p-6 hover:shadow-glass-lg hover:-translate-y-0.5 transition-all flex flex-col justify-between"
           >
             <div>

@@ -69,22 +69,37 @@ class EntityProtectionService:
 
         import json
         from pathlib import Path
-        config_path = Path(__file__).resolve().parent.parent.parent / "config" / "brands.json"
-
+        
+        # 1. Try ExcelStorageService
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            from storage.excel_storage_service import ExcelStorageService
+            excel = ExcelStorageService()
+            db_brands = excel.find_rows("MonitoredBrands", {"enabled": True})
+            for b in db_brands:
+                name = b["brand_name"]
+                if name not in self._brands:
+                    self._brands.append(name)
+                for alias in (b.get("aliases") or "").split(","):
+                    if alias.strip():
+                        self._brand_aliases[alias.strip().lower()] = name
+        except Exception:
+            pass
 
-            for brand in data.get("brands", []):
-                name = brand["name"]
-                self._brands.append(name)
-                for alias in brand.get("aliases", []):
-                    self._brand_aliases[alias.lower()] = name
+        # 2. Try seed/brands.json
+        seed_path = Path(__file__).resolve().parent.parent / "seed" / "brands.json"
+        if seed_path.exists():
+            try:
+                data = json.loads(seed_path.read_text(encoding="utf-8"))
+                for brand in data:
+                    name = brand["name"]
+                    if name not in self._brands:
+                        self._brands.append(name)
+                    for alias in brand.get("aliases", []):
+                        self._brand_aliases[alias.lower()] = name
+            except Exception as e:
+                logger.warning(f"Could not load seed brands config: {e}")
 
-            logger.info(f"Loaded {len(self._brands)} monitored brands")
-        except Exception as e:
-            logger.warning(f"Could not load brands config: {e}")
-
+        logger.info(f"Loaded {len(self._brands)} monitored brands into EntityProtectionService")
         self._loaded = True
 
     def protect(

@@ -108,7 +108,10 @@ export default function ProcessingPage() {
     inFlightRef.current = true;
     try {
       const docs = await api.getDocuments();
-      setDocuments(docs || []);
+      const uniqueDocs = (docs || []).filter((d: any, idx: number, arr: any[]) =>
+        arr.findIndex((item: any) => item.id === d.id) === idx
+      );
+      setDocuments(uniqueDocs);
       setLoading(false);
 
       // Concurrently fetch jobs for active documents without blocking UI
@@ -270,8 +273,8 @@ export default function ProcessingPage() {
                   {activeDocs.length}
                 </span>
               </div>
-              {activeDocs.map(doc => <DocumentCard
-                key={doc.id}
+              {activeDocs.map((doc, idx) => <DocumentCard
+                key={`active-${doc.id}-${idx}`}
                 doc={doc}
                 job={jobs[doc.id]}
                 expanded={expandedDocs.has(doc.id)}
@@ -295,8 +298,8 @@ export default function ProcessingPage() {
                   {completedDocs.length}
                 </span>
               </div>
-              {completedDocs.map(doc => <DocumentCard
-                key={doc.id}
+              {completedDocs.map((doc, idx) => <DocumentCard
+                key={`completed-${doc.id}-${idx}`}
                 doc={doc}
                 job={jobs[doc.id]}
                 expanded={expandedDocs.has(doc.id)}

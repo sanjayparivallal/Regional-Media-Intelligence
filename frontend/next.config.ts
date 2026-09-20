@@ -3,6 +3,9 @@ const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_U
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  experimental: {
+    proxyClientMaxBodySize: '100mb',
+  },
   async rewrites() {
     return [
       {

@@ -193,9 +193,9 @@ export default function MentionsPage() {
       {/* Mentions List Cards */}
       {!loading && !error && (
         <div className="space-y-3">
-          {filtered.map((m) => (
+          {filtered.map((m, idx) => (
             <div
-              key={m.id}
+              key={`${m.id}-${idx}`}
               className="glass-card p-5 hover:border-slate-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
               <div className="space-y-1.5 flex-1 min-w-0">

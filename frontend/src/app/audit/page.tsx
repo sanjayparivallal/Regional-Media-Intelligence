@@ -69,7 +69,10 @@ export default function AuditPage() {
   useEffect(() => {
     async function fetchDocs() {
       try {
-        const docs = await api.getDocuments("completed");
+        const rawDocs = await api.getDocuments("completed");
+        const docs = (rawDocs || []).filter((d: any, idx: number, arr: any[]) =>
+          arr.findIndex((item: any) => item.id === d.id) === idx
+        );
         setDocuments(docs);
         if (docs.length > 0) {
           setSelectedDocId(docs[0].id);
@@ -136,8 +139,8 @@ export default function AuditPage() {
                 onChange={(e) => setSelectedDocId(e.target.value)}
                 className="appearance-none pl-3 pr-8 py-2 text-xs font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 cursor-pointer"
               >
-                {documents.map((d) => (
-                  <option key={d.id} value={d.id}>
+                {documents.map((d, idx) => (
+                  <option key={`${d.id}-${idx}`} value={d.id}>
                     {d.original_filename || d.id.substring(0, 12) + "..."}
                   </option>
                 ))}

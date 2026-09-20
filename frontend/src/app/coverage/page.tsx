@@ -226,9 +226,9 @@ export default function CoveragePage() {
           </div>
           <div className="space-y-2.5">
             {coverage?.crisis_topics?.length > 0 ? (
-              coverage.crisis_topics.map((topic: any) => (
+              coverage.crisis_topics.map((topic: any, idx: number) => (
               <div
-                key={topic.topic}
+                key={`${topic.topic}-${idx}`}
                 className="flex items-center justify-between p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors"
               >
                 <div>
@@ -279,9 +279,9 @@ export default function CoveragePage() {
           </div>
           <div className="space-y-2.5">
             {coverage?.brand_mentions?.length > 0 ? (
-              coverage.brand_mentions.map((brand: any) => (
+              coverage.brand_mentions.map((brand: any, idx: number) => (
               <div
-                key={brand.brand_name}
+                key={`${brand.brand_name}-${idx}`}
                 className="flex items-center justify-between p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors"
               >
                 <div>

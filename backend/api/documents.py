@@ -11,19 +11,14 @@ import uuid
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, delete, update
-from sqlalchemy.orm import selectinload
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 
-from database import get_db
 from config import get_settings
-from models.document import Document, Page, Article, ProcessingJob, DocumentStatus
-from models.intelligence import Alert, Mention, Translation, Entity, Incident
-from models.review import Review, AuditLog
+from storage.excel_storage_service import ExcelStorageService
 from schemas.document import DocumentResponse, DocumentDetail, PageSummary, ProcessingJobResponse
+from models.document import DocumentStatus
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 settings = get_settings()
@@ -42,7 +37,6 @@ async def upload_document(
     publication_date: Optional[str] = Form(None),
     edition: Optional[str] = Form(None),
     source_region: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
 ):
     """Upload a newspaper PDF or image for processing."""
     # Validate file extension
@@ -56,8 +50,8 @@ async def upload_document(
         raise HTTPException(400, f"File too large. Maximum: {settings.max_upload_size_mb}MB")
 
     # Generate safe filename
-    file_id = str(uuid.uuid4())
-    safe_filename = f"{file_id}{ext}"
+    document_id = str(uuid.uuid4())
+    safe_filename = f"{document_id}{ext}"
     file_path = Path(settings.upload_path) / safe_filename
 
     # Save file
@@ -66,7 +60,6 @@ async def upload_document(
         f.write(content)
 
     # Parse optional fields
-    pub_id = uuid.UUID(publication_id) if publication_id else None
     pub_date = None
     if publication_date:
         try:
@@ -74,258 +67,258 @@ async def upload_document(
         except ValueError:
             pass
 
+    # Hash file for deduplication
+    import hashlib
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    excel = ExcelStorageService()
+    existing_doc = excel.find_row("Documents", {"file_hash": file_hash})
+    if existing_doc:
+        return {
+            "id": existing_doc["document_id"],
+            "filename": existing_doc["file_name"],
+            "original_filename": existing_doc["file_name"],
+            "status": existing_doc["processing_status"],
+            "created_at": existing_doc.get("created_at") or datetime.utcnow().isoformat(),
+            "updated_at": existing_doc.get("updated_at") or datetime.utcnow().isoformat(),
+            "page_count": existing_doc["total_pages"],
+            "document_type": existing_doc["source_type"]
+        }
+
     # Create document record
-    doc = Document(
-        filename=safe_filename,
-        original_filename=file.filename,
-        file_path=str(file_path),
-        file_size=len(content),
-        mime_type=file.content_type,
-        status=DocumentStatus.UPLOADED,
-        publication_id=pub_id,
-        publication_date=pub_date,
-        edition=edition,
-        source_region=source_region,
-    )
-    db.add(doc)
-    await db.flush()
-    await db.refresh(doc)
-    await db.commit()
+    doc_dict = {
+        "document_id": document_id,
+        "file_name": file.filename,
+        "file_hash": file_hash,
+        "source_type": ext,
+        "publication": publication_id,
+        "edition": edition,
+        "publication_date": pub_date.isoformat() if pub_date else None,
+        "language": None,
+        "total_pages": 0,
+        "processing_status": "UPLOADED",
+        "current_stage": "queued",
+        "progress_percent": 0.0,
+        "overall_sentiment": None,
+        "overall_risk_score": None,
+        "processing_started_at": None,
+        "processing_completed_at": None,
+        "processing_error": None,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    excel.append_row("Documents", doc_dict)
 
-    return doc
+    # Convert to DocumentResponse
+    return {
+        "id": document_id,
+        "filename": doc_dict["file_name"],
+        "original_filename": doc_dict["file_name"],
+        "status": doc_dict["processing_status"],
+        "current_stage": doc_dict.get("current_stage"),
+        "progress_percent": float(doc_dict.get("progress_percent") or 0),
+        "overall_sentiment": doc_dict.get("overall_sentiment"),
+        "overall_risk_score": doc_dict.get("overall_risk_score") if doc_dict.get("overall_risk_score") is not None else None,
+        "created_at": doc_dict.get("created_at") or datetime.utcnow().isoformat(),
+        "updated_at": doc_dict.get("updated_at") or datetime.utcnow().isoformat(),
+        "page_count": doc_dict.get("total_pages") or 0,
+        "document_type": doc_dict.get("source_type") or "unknown"
+    }
 
 
-@router.get("", response_model=list[DocumentResponse])
+@router.get("", response_model=List[DocumentResponse])
 async def list_documents(
     status: Optional[str] = None,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
 ):
     """List all documents with optional status filter."""
-    query = select(Document).order_by(desc(Document.created_at))
+    excel = ExcelStorageService()
+    docs = excel.find_rows("Documents", {})
+    
     if status:
-        query = query.where(Document.status == status)
-    query = query.limit(limit).offset(offset)
-
-    result = await db.execute(query)
-    return result.scalars().all()
+        stat_lower = status.lower()
+        docs = [d for d in docs if (d.get("processing_status") or "").lower() == stat_lower]
+        
+    # Sort descending by created_at manually
+    docs.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    
+    # Paginate
+    paginated = docs[offset:offset+limit]
+    
+    return [{
+        "id": d["document_id"],
+        "filename": d["file_name"],
+        "original_filename": d["file_name"],
+        "status": d["processing_status"],
+        "current_stage": d.get("current_stage"),
+        "progress_percent": float(d.get("progress_percent") or 0),
+        "overall_sentiment": d.get("overall_sentiment"),
+        "overall_risk_score": d.get("overall_risk_score") if d.get("overall_risk_score") is not None else None,
+        "created_at": d.get("created_at") or datetime.utcnow().isoformat(),
+        "updated_at": d.get("updated_at") or datetime.utcnow().isoformat(),
+        "page_count": d.get("total_pages") or 0,
+        "document_type": d.get("source_type") or "unknown"
+    } for d in paginated]
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
-async def get_document(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_document(document_id: str):
     """Get document detail with pages."""
-    result = await db.execute(
-        select(Document)
-        .options(selectinload(Document.pages), selectinload(Document.publication))
-        .where(Document.id == document_id)
-    )
-    doc = result.scalar_one_or_none()
+    excel = ExcelStorageService()
+    doc = excel.find_row("Documents", {"document_id": document_id})
     if not doc:
         raise HTTPException(404, "Document not found")
 
-    detail = DocumentDetail.model_validate(doc)
-    if doc.publication:
-        detail.publication_name = doc.publication.display_name or doc.publication.name
-    # Add article counts to pages
-    for page_schema in detail.pages:
-        page_obj = next((p for p in doc.pages if p.id == page_schema.id), None)
-        if page_obj:
-            count_result = await db.execute(
-                select(func.count()).select_from(
-                    select(Page).where(Page.id == page_obj.id).subquery()
-                )
-            )
-    return detail
+    pages = excel.find_rows("Pages", {"document_id": document_id})
+    page_summaries = []
+    for p in pages:
+        articles = excel.find_rows("Articles", {"page_id": p["page_id"]})
+        page_summaries.append({
+            "id": p["page_id"],
+            "page_number": p["page_number"],
+            "image_path": p["image_path"],
+            "has_text_layer": p.get("has_extractable_text", False),
+            "article_count": len(articles)
+        })
+
+    return {
+        "id": doc["document_id"],
+        "filename": doc["file_name"],
+        "original_filename": doc["file_name"],
+        "status": doc["processing_status"],
+        "current_stage": doc.get("current_stage"),
+        "progress_percent": float(doc.get("progress_percent") or 0),
+        "overall_sentiment": doc.get("overall_sentiment"),
+        "overall_risk_score": doc.get("overall_risk_score") if doc.get("overall_risk_score") is not None else None,
+        "created_at": doc.get("created_at") or datetime.utcnow().isoformat(),
+        "updated_at": doc.get("updated_at") or datetime.utcnow().isoformat(),
+        "page_count": doc.get("total_pages") or 0,
+        "document_type": doc.get("source_type") or "unknown",
+        "pages": page_summaries,
+        "publication_name": doc.get("publication")
+    }
 
 
 @router.post("/{document_id}/process", response_model=ProcessingJobResponse)
-async def start_processing(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def start_processing(document_id: str):
     """Queue document for AI processing pipeline."""
-    result = await db.execute(select(Document).where(Document.id == document_id))
-    doc = result.scalar_one_or_none()
+    excel = ExcelStorageService()
+    doc = excel.find_row("Documents", {"document_id": document_id})
+    
     if not doc:
         raise HTTPException(404, "Document not found")
 
-    if doc.status == DocumentStatus.PROCESSING:
+    if doc["processing_status"] == "PROCESSING":
         raise HTTPException(409, "Document is already being processed")
 
-    # Create processing job
-    job = ProcessingJob(
-        document_id=document_id,
-        status="queued",
-        current_stage="queued",
-    )
-    doc.status = DocumentStatus.QUEUED
-    db.add(job)
-    await db.flush()
-    await db.refresh(job)
-    await db.commit()
+    excel.update_row("Documents", {"document_id": document_id}, {"processing_status": "QUEUED"})
 
     # Trigger background processing (non-blocking)
     from workers.processor import process_document_task
     import asyncio
-    asyncio.create_task(process_document_task(str(document_id), str(job.id)))
+    job_id = str(uuid.uuid4())
+    asyncio.create_task(process_document_task(document_id, job_id))
 
-    return job
-
-
-@router.get("/{document_id}/pages", response_model=list[PageSummary])
-async def get_document_pages(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Get all pages for a document."""
-    result = await db.execute(
-        select(Page)
-        .where(Page.document_id == document_id)
-        .order_by(Page.page_number)
-    )
-    return result.scalars().all()
+    return {
+        "id": job_id,
+        "document_id": document_id,
+        "status": "queued",
+        "current_stage": "queued",
+        "progress_percent": 0.0,
+        "created_at": datetime.utcnow().isoformat()
+    }
 
 
-@router.get("/{document_id}/pages/{page_number}/image")
-async def get_page_image(document_id: uuid.UUID, page_number: int, db: AsyncSession = Depends(get_db)):
-    """Get the image file for a specific page."""
-    from fastapi.responses import FileResponse
-    result = await db.execute(
-        select(Page).where(
-            Page.document_id == document_id,
-            Page.page_number == page_number
-        )
-    )
-    page = result.scalar_one_or_none()
-    if not page or not page.image_path or not Path(page.image_path).exists():
-        raise HTTPException(404, "Page image not found")
-    return FileResponse(page.image_path)
-
-
-@router.get("/{document_id}/jobs", response_model=list[ProcessingJobResponse])
-async def get_document_jobs(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Get processing jobs for a document."""
-    result = await db.execute(
-        select(ProcessingJob)
-        .where(ProcessingJob.document_id == document_id)
-        .order_by(desc(ProcessingJob.created_at))
-    )
-    return result.scalars().all()
+@router.get("/{document_id}/jobs")
+async def get_document_jobs(document_id: str):
+    """Get processing jobs/progress for a document."""
+    excel = ExcelStorageService()
+    doc = excel.find_row("Documents", {"document_id": document_id})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    
+    status = (doc.get("processing_status") or "UPLOADED").lower()
+    current_stage = doc.get("current_stage") or "queued"
+    progress = float(doc.get("progress_percent") or 0.0)
+    
+    return [{
+        "id": f"job-{document_id[:8]}",
+        "document_id": document_id,
+        "status": status,
+        "current_stage": current_stage,
+        "progress_percent": progress,
+        "created_at": doc.get("created_at") or datetime.utcnow().isoformat(),
+        "stages": {
+            "extracting_text": {"status": "completed" if progress >= 30 else ("running" if "extracting" in current_stage else "pending")},
+            "segmenting": {"status": "completed" if progress >= 50 else ("running" if "segmenting" in current_stage else "pending")},
+            "translating": {"status": "completed" if progress >= 70 else ("running" if "translating" in current_stage else "pending")},
+            "analyzing": {"status": "completed" if progress >= 90 else ("running" if "analyzing" in current_stage else "pending")}
+        }
+    }]
 
 
 @router.post("/{document_id}/cancel")
-async def cancel_processing(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Cancel an in-progress or queued processing job."""
-    result = await db.execute(select(Document).where(Document.id == document_id))
-    doc = result.scalar_one_or_none()
+async def cancel_document(document_id: str):
+    """Cancel processing for a document."""
+    excel = ExcelStorageService()
+    doc = excel.find_row("Documents", {"document_id": document_id})
     if not doc:
         raise HTTPException(404, "Document not found")
+    
+    excel.update_row("Documents", {"document_id": document_id}, {
+        "processing_status": "CANCELLED",
+        "current_stage": "cancelled"
+    })
+    return {"status": "cancelled", "document_id": document_id}
 
-    if doc.status not in (DocumentStatus.QUEUED, DocumentStatus.PROCESSING):
-        raise HTTPException(409, f"Cannot cancel document with status '{doc.status}'")
 
-    # Mark document as failed/cancelled
-    from models.document import DocumentStatus as DS
-    doc.status = DS.FAILED
-    doc.error_message = "Cancelled by user"
+@router.get("/{document_id}/pages", response_model=List[PageSummary])
+async def get_document_pages(document_id: str):
+    """Get all pages for a document."""
+    excel = ExcelStorageService()
+    pages = excel.find_rows("Pages", {"document_id": document_id})
+    pages.sort(key=lambda x: x.get("page_number", 0))
+    
+    result = []
+    for p in pages:
+        articles = excel.find_rows("Articles", {"page_id": p["page_id"]})
+        result.append({
+            "id": p["page_id"],
+            "page_number": p["page_number"],
+            "image_path": p["image_path"],
+            "has_text_layer": p.get("has_extractable_text", False),
+            "article_count": len(articles)
+        })
+    return result
 
-    # Mark all active/queued/running jobs for this document as failed
-    jobs_result = await db.execute(
-        select(ProcessingJob)
-        .where(
-            ProcessingJob.document_id == document_id,
-            ProcessingJob.status.in_(["queued", "running"])
-        )
-    )
-    for job in jobs_result.scalars().all():
-        job.status = "failed"
-        job.error_message = "Cancelled by user"
 
-    await db.commit()
-    return {"status": "cancelled", "document_id": str(document_id)}
+@router.get("/{document_id}/pages/{page_number}/image")
+async def get_page_image(document_id: str, page_number: int):
+    """Get the image file for a specific page."""
+    from fastapi.responses import FileResponse
+    excel = ExcelStorageService()
+    pages = excel.find_rows("Pages", {"document_id": document_id, "page_number": page_number})
+    if not pages:
+        raise HTTPException(404, "Page not found")
+    page = pages[0]
+    
+    if not page.get("image_path") or not Path(page["image_path"]).exists():
+        raise HTTPException(404, "Page image not found")
+    return FileResponse(page["image_path"])
 
 
 @router.delete("/{document_id}")
-async def delete_document(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Delete a document and all its associated data (files, pages, articles, alerts, etc.)."""
-    result = await db.execute(select(Document).where(Document.id == document_id))
-    doc = result.scalar_one_or_none()
+async def delete_document(document_id: str):
+    """Delete document and related data from storage."""
+    excel = ExcelStorageService()
+    doc = excel.find_row("Documents", {"document_id": document_id})
     if not doc:
         raise HTTPException(404, "Document not found")
-
-    # 1. Clean up entire page images directory for this document
-    try:
-        page_dir = Path(settings.page_image_path) / str(document_id)
-        if page_dir.exists():
-            shutil.rmtree(page_dir, ignore_errors=True)
-    except Exception:
-        pass
-
-    # Clean up individual page files if stored outside document directory
-    pages_result = await db.execute(select(Page).where(Page.document_id == document_id))
-    pages = pages_result.scalars().all()
-    for p in pages:
-        for img_path in (p.image_path, p.thumbnail_path):
-            if img_path and img_path != "demo":
-                try:
-                    Path(img_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-
-    # 2. Delete the physical uploaded document file if it exists
-    try:
-        if doc.file_path and doc.file_path != "demo":
-            fp = Path(doc.file_path)
-            if fp.exists():
-                fp.unlink(missing_ok=True)
-            else:
-                # Try relative to upload_path
-                upload_fp = Path(settings.upload_path) / fp.name
-                if upload_fp.exists():
-                    upload_fp.unlink(missing_ok=True)
-    except Exception:
-        pass
-
-    # 3. Find all articles for this document to delete their dependents
-    articles_result = await db.execute(select(Article.id).where(Article.document_id == document_id))
-    article_ids = articles_result.scalars().all()
-
-    # Delete audit logs explicitly for this document
-    await db.execute(delete(AuditLog).where(AuditLog.document_id == document_id))
-
-    if article_ids:
-        # Alerts referencing these articles
-        alerts_result = await db.execute(select(Alert).where(Alert.article_id.in_(article_ids)))
-        alerts = alerts_result.scalars().all()
-        alert_ids = [a.id for a in alerts]
-        incident_ids = [a.incident_id for a in alerts if a.incident_id]
-
-        if alert_ids:
-            await db.execute(delete(AuditLog).where(AuditLog.alert_id.in_(alert_ids)))
-            await db.execute(delete(Review).where(Review.alert_id.in_(alert_ids)))
-            await db.execute(delete(Alert).where(Alert.id.in_(alert_ids)))
-
-        # Clean up or update orphaned incidents
-        if incident_ids:
-            for inc_id in set(incident_ids):
-                remaining_count = (await db.execute(
-                    select(func.count()).select_from(Alert).where(Alert.incident_id == inc_id)
-                )).scalar() or 0
-                if remaining_count == 0:
-                    await db.execute(delete(Incident).where(Incident.id == inc_id))
-                else:
-                    await db.execute(
-                        update(Incident).where(Incident.id == inc_id).values(alert_count=remaining_count)
-                    )
-
-        await db.execute(delete(AuditLog).where(AuditLog.article_id.in_(article_ids)))
-        await db.execute(delete(Review).where(Review.article_id.in_(article_ids)))
-        await db.execute(delete(Mention).where(Mention.article_id.in_(article_ids)))
-        await db.execute(delete(Entity).where(Entity.article_id.in_(article_ids)))
-        await db.execute(delete(Translation).where(Translation.article_id.in_(article_ids)))
-        await db.execute(delete(Article).where(Article.id.in_(article_ids)))
-
-    # Delete processing jobs and pages
-    await db.execute(delete(ProcessingJob).where(ProcessingJob.document_id == document_id))
-    await db.execute(delete(Page).where(Page.document_id == document_id))
-
-    # Finally delete the document record
-    await db.delete(doc)
-    await db.commit()
-    return {"status": "deleted", "document_id": str(document_id)}
-
+    
+    excel.delete_rows("Documents", {"document_id": document_id})
+    excel.delete_rows("Pages", {"document_id": document_id})
+    excel.delete_rows("Articles", {"document_id": document_id})
+    excel.delete_rows("Alerts", {"document_id": document_id})
+    excel.delete_rows("AuditLogs", {"document_id": document_id})
+    return {"status": "deleted", "document_id": document_id}

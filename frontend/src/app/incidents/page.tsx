@@ -132,10 +132,10 @@ export default function IncidentsPage() {
 
       {!loading && !error && (
         <div className="space-y-4">
-          {filtered.map((inc) => {
+          {filtered.map((inc, idx) => {
             const severity = getSeverity(inc);
             return (
-              <div key={inc.id} className={`glass-card p-6 border-l-4 ${severity === "critical" ? "border-l-red-500" : severity === "high" ? "border-l-amber-500" : "border-l-primary-500"}`}>
+              <div key={`${inc.id}-${idx}`} className={`glass-card p-6 border-l-4 ${severity === "critical" ? "border-l-red-500" : severity === "high" ? "border-l-amber-500" : "border-l-primary-500"}`}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{getIncidentNumber(inc)}</span>

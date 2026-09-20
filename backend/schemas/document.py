@@ -88,6 +88,10 @@ class DocumentResponse(BaseModel):
     page_count: int = 0
     status: str
     error_message: Optional[str] = None
+    current_stage: Optional[str] = None
+    progress_percent: float = 0.0
+    overall_sentiment: Optional[str] = None
+    overall_risk_score: Optional[float] = None
 
     publication_id: Optional[UUID] = None
     publication_date: Optional[datetime] = None

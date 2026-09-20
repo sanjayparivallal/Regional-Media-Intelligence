@@ -92,9 +92,9 @@ export default function EvidenceExplorerPage() {
         {recentAlerts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-500">
             <span className="font-semibold text-slate-400">Recent alerts:</span>
-            {recentAlerts.slice(0, 5).map((a) => (
+            {recentAlerts.slice(0, 5).map((a, idx) => (
               <button
-                key={a.id}
+                key={`${a.id}-${idx}`}
                 onClick={() => {
                   const q = a.brand_name || a.title?.split(":")[0] || "";
                   setQuery(q);
@@ -140,7 +140,7 @@ export default function EvidenceExplorerPage() {
                   </p>
                   {results.articles.map((article: any, i: number) => (
                     <div
-                      key={article.id || i}
+                      key={`article-${article.id || i}-${i}`}
                       className="glass-card p-5 hover:border-slate-300 transition-all"
                     >
                       <div className="flex flex-col md:flex-row md:items-start gap-4">
@@ -177,7 +177,7 @@ export default function EvidenceExplorerPage() {
                   </p>
                   {results.alerts.map((alert: any, i: number) => (
                     <div
-                      key={alert.id || i}
+                      key={`alert-${alert.id || i}-${i}`}
                       className="glass-card p-5 hover:border-slate-300 transition-all"
                     >
                       <div className="flex flex-col md:flex-row md:items-start gap-4">
@@ -215,7 +215,7 @@ export default function EvidenceExplorerPage() {
                   </p>
                   {results.brands.map((brand: any, i: number) => (
                     <div
-                      key={brand.id || i}
+                      key={`brand-${brand.id || i}-${i}`}
                       className="glass-card p-5 hover:border-slate-300 transition-all"
                     >
                       <div className="flex items-center gap-4">

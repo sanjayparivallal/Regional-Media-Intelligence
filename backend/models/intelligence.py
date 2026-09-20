@@ -1,28 +1,50 @@
-"""
-Intelligence-related ORM models.
-
-Translation, Entity, Mention, Alert, Incident — the analysis outputs.
-Every record maintains foreign keys back to the source article/page/document.
-"""
-
 import uuid
 from datetime import datetime
-from sqlalchemy import (
-    Column, String, Integer, Float, Text, Boolean, DateTime,
-    ForeignKey, JSON, Enum as SAEnum, Index
-)
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 import enum
 
-from database import Base
+class Translation(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    article_id: str
+    source_language: str
+    source_text: str
+    translated_text: str
+    confidence: Optional[float] = None
+    model_used: Optional[str] = None
+    entities_protected: bool = False
+    needs_review: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class Entity(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    article_id: str
+    text: str
+    type: str
+    normalized_name: Optional[str] = None
+    start_char: Optional[int] = None
+    end_char: Optional[int] = None
+    confidence: Optional[float] = None
+    is_monitored_brand: bool = False
+    verification_status: str = "unverified"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Mention(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    article_id: str
+    brand_id: str
+    brand_name: str
+    matched_text: str
+    match_type: str
+    confidence: Optional[float] = None
+    context_snippet: Optional[str] = None
+    verified_by_lfm: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class SentimentLabel(str, enum.Enum):
     POSITIVE = "positive"
     NEUTRAL = "neutral"
     NEGATIVE = "negative"
-
 
 class AlertPriority(str, enum.Enum):
     LOW = "low"
@@ -30,200 +52,33 @@ class AlertPriority(str, enum.Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
+class AIAnalysis(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    article_id: str
+    brand_id: Optional[str] = None
+    sentiment: SentimentLabel = SentimentLabel.NEUTRAL
+    sentiment_confidence: Optional[float] = None
+    sentiment_reasoning: Optional[str] = None
+    crisis_detected: bool = False
+    crisis_category: Optional[str] = None
+    crisis_severity: Optional[float] = None
+    crisis_reasoning: Optional[str] = None
+    summary: Optional[str] = None
+    confidence: Optional[float] = None
+    model_name: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class Translation(Base):
-    """Translation of an article with confidence tracking."""
-    __tablename__ = "translations"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-
-    source_language = Column(String(20), nullable=False)
-    target_language = Column(String(20), default="en")
-    source_text = Column(Text)
-    translated_text = Column(Text)
-    confidence = Column(Float)
-
-    # Model used
-    model_used = Column(String(200))
-    translation_time_ms = Column(Integer)
-
-    # Entity preservation
-    entities_protected = Column(JSON)  # Entities that were preserved during translation
-
-    needs_review = Column(Boolean, default=False)
-    reviewed = Column(Boolean, default=False)
-    corrected_text = Column(Text)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    article = relationship("Article", back_populates="translations")
-
-    __table_args__ = (
-        Index("idx_translations_article", "article_id"),
-    )
-
-
-class Entity(Base):
-    """Named entity extracted from an article."""
-    __tablename__ = "entities"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-
-    text = Column(String(500), nullable=False)
-    entity_type = Column(String(100))  # ORGANIZATION, PERSON, LOCATION, PRODUCT, etc.
-    confidence = Column(Float)
-
-    # Position in text
-    start_offset = Column(Integer)
-    end_offset = Column(Integer)
-
-    # Source
-    detected_in = Column(String(50))  # original, translated
-    model_used = Column(String(200))
-
-    # Normalization
-    normalized_text = Column(String(500))
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    article = relationship("Article", back_populates="entities")
-
-    __table_args__ = (
-        Index("idx_entities_article", "article_id"),
-        Index("idx_entities_type", "entity_type"),
-    )
-
-
-class Mention(Base):
-    """Brand mention detected in an article."""
-    __tablename__ = "mentions"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
-
-    matched_text = Column(String(500))
-    match_type = Column(String(50))  # exact, alias, fuzzy, context
-    match_confidence = Column(Float)
-    context_snippet = Column(Text)  # Surrounding text for evidence
-
-    # Sentiment for this specific mention
-    sentiment = Column(SAEnum(SentimentLabel))
-    sentiment_confidence = Column(Float)
-    sentiment_model_used = Column(String(200))
-
-    # Crisis classification
-    crisis_topic = Column(String(200))
-    crisis_confidence = Column(Float)
-
-    # Risk scoring
-    risk_score = Column(Float)
-    risk_breakdown = Column(JSON)  # {sentiment, brand, topic, reach, confidence}
-    risk_priority = Column(SAEnum(AlertPriority))
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    article = relationship("Article", back_populates="mentions")
-    brand = relationship("Brand", back_populates="mentions")
-
-    __table_args__ = (
-        Index("idx_mentions_article", "article_id"),
-        Index("idx_mentions_brand", "brand_id"),
-        Index("idx_mentions_risk", "risk_score"),
-    )
-
-
-class Alert(Base):
-    """Generated alert for a brand mention requiring attention."""
-    __tablename__ = "alerts"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-    mention_id = Column(UUID(as_uuid=True), ForeignKey("mentions.id", ondelete="CASCADE"), nullable=True)
-    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
-    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=True)
-
-    # Alert details
-    title = Column(String(500))
-    summary = Column(Text)
-    priority = Column(SAEnum(AlertPriority), nullable=False)
-    risk_score = Column(Float, nullable=False)
-    risk_breakdown = Column(JSON)
-
-    # Context
-    publication_name = Column(String(200))
-    page_number = Column(Integer)
-    language = Column(String(20))
-    region = Column(String(200))
-
-    # Sentiment
-    sentiment = Column(SAEnum(SentimentLabel))
-    sentiment_confidence = Column(Float)
-
-    # Crisis
-    crisis_topic = Column(String(200))
-    crisis_keywords = Column(JSON)
-
-    # Status
-    status = Column(String(50), default="active")  # active, reviewed, dismissed, escalated
-    reviewed_by = Column(String(200))
-    reviewed_at = Column(DateTime)
-    review_notes = Column(Text)
-
-    # Deduplication
-    fingerprint = Column(String(200))
-    is_duplicate = Column(Boolean, default=False)
-
-    # Demo
-    is_demo = Column(Boolean, default=False)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    article = relationship("Article", back_populates="alerts")
-    brand = relationship("Brand", back_populates="alerts")
-    incident = relationship("Incident", back_populates="alerts")
-
-    __table_args__ = (
-        Index("idx_alerts_brand", "brand_id"),
-        Index("idx_alerts_priority", "priority"),
-        Index("idx_alerts_risk", "risk_score"),
-        Index("idx_alerts_created", "created_at"),
-        Index("idx_alerts_status", "status"),
-    )
-
-
-class Incident(Base):
-    """Grouped/deduplicated alerts representing a single story/event."""
-    __tablename__ = "incidents"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title = Column(String(500))
-    summary = Column(Text)
-    priority = Column(SAEnum(AlertPriority))
-    max_risk_score = Column(Float)
-
-    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id"), nullable=True)
-    alert_count = Column(Integer, default=1)
-
-    status = Column(String(50), default="active")
-    first_seen = Column(DateTime, default=datetime.utcnow)
-    last_seen = Column(DateTime, default=datetime.utcnow)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    alerts = relationship("Alert", back_populates="incident")
-    brand = relationship("Brand")
-
-    __table_args__ = (
-        Index("idx_incidents_priority", "priority"),
-        Index("idx_incidents_brand", "brand_id"),
-    )
+class Alert(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    article_id: str
+    brand_id: Optional[str] = None
+    document_id: str
+    priority: AlertPriority
+    crisis_score: float
+    sentiment: SentimentLabel
+    category: Optional[str] = None
+    summary: str
+    status: str = "new"
+    assigned_to: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    resolved_at: Optional[datetime] = None

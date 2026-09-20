@@ -11,13 +11,13 @@ from pydantic import BaseModel
 class AlertResponse(BaseModel):
     id: UUID
     article_id: UUID
-    brand_id: UUID
+    brand_id: Optional[UUID] = None
     incident_id: Optional[UUID] = None
 
     title: Optional[str] = None
     summary: Optional[str] = None
-    priority: str
-    risk_score: float
+    priority: str = "LOW"
+    risk_score: float = 0.0
     risk_breakdown: Optional[dict] = None
 
     publication_name: Optional[str] = None
@@ -37,8 +37,8 @@ class AlertResponse(BaseModel):
     brand_name: Optional[str] = None
     document_id: Optional[UUID] = None
 
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -69,7 +69,7 @@ class ArticleSummaryForEvidence(BaseModel):
     headline: Optional[str] = None
     body_text: Optional[str] = None
     full_text: Optional[str] = None
-    word_count: int = 0
+    word_count: Optional[int] = 0
     detected_language: Optional[str] = None
     ocr_confidence: Optional[float] = None
     bbox_x: Optional[float] = None
@@ -84,12 +84,13 @@ class ArticleSummaryForEvidence(BaseModel):
 
 class PageEvidenceInfo(BaseModel):
     id: UUID
-    page_number: int
+    page_number: int = 1
     image_path: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
-    ocr_confidence: float = 0.0
+    ocr_confidence: Optional[float] = 0.0
     ocr_engine_used: Optional[str] = None
+    has_text_layer: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -97,8 +98,9 @@ class PageEvidenceInfo(BaseModel):
 
 class DocumentEvidenceInfo(BaseModel):
     id: UUID
-    filename: str
-    original_filename: str
+    filename: Optional[str] = None
+    original_filename: Optional[str] = None
+    document_type: Optional[str] = None
     publication_id: Optional[UUID] = None
     publication_date: Optional[datetime] = None
 
@@ -115,9 +117,9 @@ class IncidentResponse(BaseModel):
     brand_id: Optional[UUID] = None
     alert_count: int = 1
     status: str = "active"
-    first_seen: datetime
-    last_seen: datetime
-    created_at: datetime
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -137,7 +139,7 @@ class ReviewResponse(BaseModel):
     correction: Optional[dict] = None
     review_notes: Optional[str] = None
     reviewed_at: Optional[datetime] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -164,7 +166,7 @@ class AuditLogResponse(BaseModel):
     processing_time_ms: Optional[int] = None
     success: bool = True
     error_message: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -39,13 +39,13 @@ class SentimentDistribution(BaseModel):
 
 class CrisisTopicDistribution(BaseModel):
     topic: str
-    count: int
-    avg_risk_score: float
+    count: int = 0
+    avg_risk_score: float = 0.0
 
 
 class BrandMentionSummary(BaseModel):
     brand_name: str
-    total_mentions: int
+    total_mentions: int = 0
     positive: int = 0
     neutral: int = 0
     negative: int = 0
@@ -55,7 +55,7 @@ class BrandMentionSummary(BaseModel):
 
 class TrendPoint(BaseModel):
     date: str
-    value: float
+    value: float = 0.0
     label: Optional[str] = None
 
 
@@ -67,6 +67,8 @@ class CoverageAnalytics(BaseModel):
     brand_mentions: List[BrandMentionSummary] = []
     sentiment_trend: List[TrendPoint] = []
     crisis_trend: List[TrendPoint] = []
+    languages: Optional[list] = None
+    publications: Optional[list] = None
 
 
 class PublicationCreate(BaseModel):

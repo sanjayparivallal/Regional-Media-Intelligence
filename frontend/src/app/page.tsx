@@ -103,8 +103,8 @@ export default function OverviewPage() {
       else if (alert.sentiment === 'negative') b.negative += 1;
       else b.neutral += 1;
       return acc;
-    }, new Map())
-  ).map(([, b]: [string, any]) => ({
+    }, new Map<string, any>())
+  ).map(([_, b]: [string, any]) => ({
     ...b,
     status: b.risk >= 80 ? 'critical' : b.risk >= 50 ? 'high' : 'low',
   }));
@@ -312,11 +312,11 @@ export default function OverviewPage() {
             </div>
 
             <div className="divide-y divide-slate-100">
-              {alerts.map((alert) => {
+              {alerts.map((alert, idx) => {
                 const isCritical = alert.priority === "critical";
                 return (
                   <div
-                    key={alert.id}
+                    key={`${alert.id}-${idx}`}
                     className={`p-5 transition-all hover:bg-slate-50/70 border-l-4 ${
                       isCritical ? "border-l-red-500" : "border-l-amber-500"
                     }`}

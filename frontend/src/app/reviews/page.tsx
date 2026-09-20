@@ -91,11 +91,11 @@ export default function ReviewsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {reviews.map((review) => {
+          {reviews.map((review, idx) => {
             const isPending = review.status === "pending";
             return (
               <div
-                key={review.id}
+                key={`${review.id}-${idx}`}
                 className={`glass-card p-6 transition-all ${
                   !isPending ? "opacity-60 bg-slate-50/50" : "hover:border-slate-300"
                 }`}

@@ -98,7 +98,7 @@ export default function AlertsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {alerts.map((alert) => {
+          {alerts.map((alert, idx) => {
             const isCritical = alert.priority === "critical";
             const isHigh = alert.priority === "high";
             const borderAccent = isCritical
@@ -109,7 +109,7 @@ export default function AlertsPage() {
 
             return (
               <div
-                key={alert.id}
+                key={`${alert.id}-${idx}`}
                 className={`glass-card p-6 animate-slide-up ${borderAccent} hover:border-slate-300 transition-all`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-start gap-6">

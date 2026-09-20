@@ -83,35 +83,39 @@ class OCRService:
 
     def _get_easyocr_reader(self, language: str):
         """Get or create an EasyOCR reader for a specific language."""
-        # EasyOCR groups languages by script for its recognition model.
-        # For Devanagari (hi, mr), they share the same recognition model.
-        # Each reader is keyed by its language list.
         from services.language_config import get_language_registry
         registry = get_language_registry()
 
-        lang_cfg = registry.get(language)
-        if not lang_cfg or not lang_cfg.easyocr_code:
-            return None
+        lang_cfg = registry.get(language) if language else None
+        easyocr_code = lang_cfg.easyocr_code if lang_cfg else (language or "ta")
 
-        # Build the language list for EasyOCR
-        # Use single-language reader to avoid character set conflicts
-        lang_list = [lang_cfg.easyocr_code]
-        key = tuple(lang_list)
+        if not easyocr_code:
+            easyocr_code = "ta"
+
+        # Build the language list for EasyOCR (bilingual regional + English)
+        lang_list = [easyocr_code]
+        if "en" not in lang_list and easyocr_code != "en":
+            lang_list.append("en")
+        key = tuple(sorted(lang_list))
 
         if key not in self._easyocr_readers:
             try:
                 import easyocr
+                has_local_weights = MODEL_DIR.exists() and any(MODEL_DIR.glob("*.pth"))
                 reader = easyocr.Reader(
-                    lang_list,
+                    list(key),
                     gpu=self._gpu_available,
                     model_storage_directory=str(MODEL_DIR),
-                    download_enabled=True,
+                    download_enabled=not has_local_weights,
                     verbose=False,
                 )
                 self._easyocr_readers[key] = reader
-                logger.info(f"Initialized EasyOCR reader for: {lang_list}")
+                logger.info(f"Initialized Indic-OCR reader for: {list(key)}")
             except Exception as e:
-                logger.error(f"Failed to initialize EasyOCR for {lang_list}: {e}")
+                logger.error(f"Failed to initialize EasyOCR for {key}: {e}")
+                # Fallback to English reader
+                if key != ("en",):
+                    return self._get_easyocr_reader("en")
                 return None
 
         return self._easyocr_readers[key]
@@ -182,7 +186,7 @@ class OCRService:
 
         # Select provider
         provider = registry.get_ocr_provider(language) if language else "easyocr"
-        effective_language = language or "en"
+        effective_language = language or "ta"
 
         try:
             if provider == "paddleocr":

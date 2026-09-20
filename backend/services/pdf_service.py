@@ -96,12 +96,22 @@ class PDFService:
 
         # Handle image files directly
         if path.suffix.lower() in ('.png', '.jpg', '.jpeg', '.tiff', '.tif'):
+            img_width, img_height = 2480, 3508
+            try:
+                from PIL import Image
+                with Image.open(path) as img_obj:
+                    img_width, img_height = img_obj.size
+            except Exception:
+                pass
+
             elapsed = round(time.time() - start_time, 2)
             return PDFProcessingResult(
                 filename=path.name, page_count=1, document_type="image",
                 pages=[PageRenderResult(
                     page_number=1, image_path=str(path),
                     has_text_layer=False,
+                    width=img_width,
+                    height=img_height,
                 )],
                 processing_time=elapsed,
             )
