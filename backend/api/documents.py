@@ -30,6 +30,25 @@ ALLOWED_MIME_TYPES = {
 }
 
 
+def _format_doc_response(d: dict) -> dict:
+    """Helper to convert a storage document dictionary to DocumentResponse dictionary."""
+    return {
+        "id": d["document_id"],
+        "filename": d.get("file_name", "unnamed"),
+        "original_filename": d.get("file_name", "unnamed"),
+        "status": d.get("processing_status", "UPLOADED"),
+        "error_message": d.get("processing_error"),
+        "current_stage": d.get("current_stage"),
+        "progress_percent": float(d.get("progress_percent") or 0.0),
+        "overall_sentiment": d.get("overall_sentiment"),
+        "overall_risk_score": float(d["overall_risk_score"]) if d.get("overall_risk_score") is not None else None,
+        "created_at": d.get("created_at") or datetime.utcnow().isoformat(),
+        "updated_at": d.get("processing_completed_at") or d.get("created_at") or datetime.utcnow().isoformat(),
+        "page_count": int(d.get("total_pages") or 0),
+        "document_type": d.get("source_type") or "unknown",
+    }
+
+
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
@@ -74,16 +93,7 @@ async def upload_document(
     excel = ExcelStorageService()
     existing_doc = excel.find_row("Documents", {"file_hash": file_hash})
     if existing_doc:
-        return {
-            "id": existing_doc["document_id"],
-            "filename": existing_doc["file_name"],
-            "original_filename": existing_doc["file_name"],
-            "status": existing_doc["processing_status"],
-            "created_at": existing_doc.get("created_at") or datetime.utcnow().isoformat(),
-            "updated_at": existing_doc.get("updated_at") or datetime.utcnow().isoformat(),
-            "page_count": existing_doc["total_pages"],
-            "document_type": existing_doc["source_type"]
-        }
+        return _format_doc_response(existing_doc)
 
     # Create document record
     doc_dict = {
@@ -108,22 +118,7 @@ async def upload_document(
     }
     
     excel.append_row("Documents", doc_dict)
-
-    # Convert to DocumentResponse
-    return {
-        "id": document_id,
-        "filename": doc_dict["file_name"],
-        "original_filename": doc_dict["file_name"],
-        "status": doc_dict["processing_status"],
-        "current_stage": doc_dict.get("current_stage"),
-        "progress_percent": float(doc_dict.get("progress_percent") or 0),
-        "overall_sentiment": doc_dict.get("overall_sentiment"),
-        "overall_risk_score": doc_dict.get("overall_risk_score") if doc_dict.get("overall_risk_score") is not None else None,
-        "created_at": doc_dict.get("created_at") or datetime.utcnow().isoformat(),
-        "updated_at": doc_dict.get("updated_at") or datetime.utcnow().isoformat(),
-        "page_count": doc_dict.get("total_pages") or 0,
-        "document_type": doc_dict.get("source_type") or "unknown"
-    }
+    return _format_doc_response(doc_dict)
 
 
 @router.get("", response_model=List[DocumentResponse])
@@ -146,20 +141,7 @@ async def list_documents(
     # Paginate
     paginated = docs[offset:offset+limit]
     
-    return [{
-        "id": d["document_id"],
-        "filename": d["file_name"],
-        "original_filename": d["file_name"],
-        "status": d["processing_status"],
-        "current_stage": d.get("current_stage"),
-        "progress_percent": float(d.get("progress_percent") or 0),
-        "overall_sentiment": d.get("overall_sentiment"),
-        "overall_risk_score": d.get("overall_risk_score") if d.get("overall_risk_score") is not None else None,
-        "created_at": d.get("created_at") or datetime.utcnow().isoformat(),
-        "updated_at": d.get("updated_at") or datetime.utcnow().isoformat(),
-        "page_count": d.get("total_pages") or 0,
-        "document_type": d.get("source_type") or "unknown"
-    } for d in paginated]
+    return [_format_doc_response(d) for d in paginated]
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -182,22 +164,10 @@ async def get_document(document_id: str):
             "article_count": len(articles)
         })
 
-    return {
-        "id": doc["document_id"],
-        "filename": doc["file_name"],
-        "original_filename": doc["file_name"],
-        "status": doc["processing_status"],
-        "current_stage": doc.get("current_stage"),
-        "progress_percent": float(doc.get("progress_percent") or 0),
-        "overall_sentiment": doc.get("overall_sentiment"),
-        "overall_risk_score": doc.get("overall_risk_score") if doc.get("overall_risk_score") is not None else None,
-        "created_at": doc.get("created_at") or datetime.utcnow().isoformat(),
-        "updated_at": doc.get("updated_at") or datetime.utcnow().isoformat(),
-        "page_count": doc.get("total_pages") or 0,
-        "document_type": doc.get("source_type") or "unknown",
-        "pages": page_summaries,
-        "publication_name": doc.get("publication")
-    }
+    resp = _format_doc_response(doc)
+    resp["pages"] = page_summaries
+    resp["publication_name"] = doc.get("publication")
+    return resp
 
 
 @router.post("/{document_id}/process", response_model=ProcessingJobResponse)
@@ -209,10 +179,10 @@ async def start_processing(document_id: str):
     if not doc:
         raise HTTPException(404, "Document not found")
 
-    if doc["processing_status"] == "PROCESSING":
+    if doc.get("processing_status") == "PROCESSING":
         raise HTTPException(409, "Document is already being processed")
 
-    excel.update_row("Documents", {"document_id": document_id}, {"processing_status": "QUEUED"})
+    excel.update_row("Documents", {"document_id": document_id}, {"processing_status": "QUEUED", "current_stage": "queued", "progress_percent": 0.0})
 
     # Trigger background processing (non-blocking)
     from workers.processor import process_document_task
@@ -250,10 +220,10 @@ async def get_document_jobs(document_id: str):
         "progress_percent": progress,
         "created_at": doc.get("created_at") or datetime.utcnow().isoformat(),
         "stages": {
-            "extracting_text": {"status": "completed" if progress >= 30 else ("running" if "extracting" in current_stage else "pending")},
+            "extracting_text": {"status": "completed" if progress >= 30 else ("running" if "extracting" in current_stage or "ocr" in current_stage.lower() else "pending")},
             "segmenting": {"status": "completed" if progress >= 50 else ("running" if "segmenting" in current_stage else "pending")},
-            "translating": {"status": "completed" if progress >= 70 else ("running" if "translating" in current_stage else "pending")},
-            "analyzing": {"status": "completed" if progress >= 90 else ("running" if "analyzing" in current_stage else "pending")}
+            "translating": {"status": "completed" if progress >= 70 else ("running" if "translating" in current_stage or "translation" in current_stage.lower() else "pending")},
+            "analyzing": {"status": "completed" if progress >= 90 else ("running" if "analyzing" in current_stage or "sentiment" in current_stage.lower() else "pending")}
         }
     }]
 

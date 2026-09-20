@@ -606,6 +606,10 @@ async def process_document_task(document_id: str, job_id: str):
                 "processing_error": str(e),
                 "processing_completed_at": datetime.utcnow().isoformat()
             })
+            try:
+                await _log_audit(excel, document_id, None, "pipeline_failed", "pipeline", details={"error": str(e)})
+            except Exception:
+                pass
 
 
 async def _log_audit(excel: ExcelStorageService, doc_id: str, article_id: str,
