@@ -28,7 +28,7 @@ from typing import List, Optional
 from harvesting.core.models import EditionConfig, NewspaperSource
 from harvesting.exceptions import AuthRequired, CaptchaRequired, EditionNotFound
 from harvesting.harvesters.playwright import PlaywrightHarvester, _is_captcha_page
-from harvesting.utils import substitute_date_in_url
+from harvesting.utils import substitute_date_in_url, run_in_proactor_thread
 
 logger = logging.getLogger(__name__)
 
@@ -104,77 +104,78 @@ class AuthenticatedPlaywrightHarvester(PlaywrightHarvester):
             raise EditionNotFound(f"No URL for source: {source.id}")
         start_url = substitute_date_in_url(url_template, target_date)
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
+        async def _do_session_discover():
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
 
-            # Restore session if available
-            context_kwargs = {}
-            if auth_state_path.exists():
-                context_kwargs["storage_state"] = str(auth_state_path)
-                logger.info(f"source={source.id} status=RESTORING_SESSION")
-            else:
-                logger.info(f"source={source.id} status=NO_SESSION_FILE")
+                # Restore session if available
+                context_kwargs = {}
+                if auth_state_path.exists():
+                    context_kwargs["storage_state"] = str(auth_state_path)
+                    logger.info(f"source={source.id} status=RESTORING_SESSION")
+                else:
+                    logger.info(f"source={source.id} status=NO_SESSION_FILE")
 
-            context = await browser.new_context(
-                locale="en-IN",
-                timezone_id="Asia/Kolkata",
-                **context_kwargs,
-            )
-            page = await context.new_page()
+                context = await browser.new_context(
+                    locale="en-IN",
+                    timezone_id="Asia/Kolkata",
+                    **context_kwargs,
+                )
+                page = await context.new_page()
 
-            discovered_url: Optional[str] = None
+                discovered_url: Optional[str] = None
 
-            async def handle_response(response):
-                nonlocal discovered_url
-                content_type = response.headers.get("content-type", "")
-                if "pdf" in content_type and discovered_url is None:
-                    discovered_url = response.url
+                async def handle_response(response):
+                    nonlocal discovered_url
+                    content_type = response.headers.get("content-type", "")
+                    if "pdf" in content_type and discovered_url is None:
+                        discovered_url = response.url
 
-            page.on("response", handle_response)
+                page.on("response", handle_response)
 
-            try:
-                await page.goto(start_url, wait_until="networkidle", timeout=60_000)
-                content = await page.content()
+                try:
+                    await page.goto(start_url, wait_until="networkidle", timeout=60_000)
+                    content = await page.content()
 
-                # Security checks
-                if _is_captcha_page(content):
-                    raise CaptchaRequired(f"CAPTCHA detected: {source.id}")
+                    # Security checks
+                    if _is_captcha_page(content):
+                        raise CaptchaRequired(f"CAPTCHA detected: {source.id}")
 
-                if _is_login_page(content) or _is_paywall_page(content):
-                    logger.warning(f"source={source.id} status=SESSION_EXPIRED")
-                    raise AuthRequired(
-                        f"Session expired or auth required for source: {source.id}. "
-                        f"Delete {auth_state_path} and reauthenticate."
+                    if _is_login_page(content) or _is_paywall_page(content):
+                        logger.warning(f"source={source.id} status=SESSION_EXPIRED")
+                        raise AuthRequired(
+                            f"Session expired or auth required for source: {source.id}. "
+                            f"Delete {auth_state_path} and reauthenticate."
+                        )
+
+                    if discovered_url:
+                        return discovered_url
+
+                    # DOM scan (reuse parent logic via super)
+                    from harvesting.harvesters.playwright import _looks_like_pdf_url
+                    links = await page.eval_on_selector_all(
+                        "a[href]",
+                        """els => els.map(e => ({
+                            href: e.href,
+                            dataSrc: e.getAttribute('data-src') || e.getAttribute('data-href')
+                        }))""",
+                    )
+                    for link in links:
+                        href = link.get("href", "") or ""
+                        if _looks_like_pdf_url(href):
+                            return href
+                        data_src = link.get("dataSrc", "") or ""
+                        if data_src and _looks_like_pdf_url(data_src):
+                            return data_src
+
+                    raise EditionNotFound(
+                        f"No PDF found on {start_url} for authenticated source {source.id}"
                     )
 
-                if discovered_url:
-                    return discovered_url
+                finally:
+                    await browser.close()
 
-                # DOM scan (reuse parent logic via super)
-                # Reconstruct page reference for super method not possible,
-                # so inline the scan here:
-                from harvesting.harvesters.playwright import _looks_like_pdf_url
-                links = await page.eval_on_selector_all(
-                    "a[href]",
-                    """els => els.map(e => ({
-                        href: e.href,
-                        dataSrc: e.getAttribute('data-src') || e.getAttribute('data-href')
-                    }))""",
-                )
-                for link in links:
-                    href = link.get("href", "") or ""
-                    if _looks_like_pdf_url(href):
-                        return href
-                    data_src = link.get("dataSrc", "") or ""
-                    if data_src and _looks_like_pdf_url(data_src):
-                        return data_src
-
-                raise EditionNotFound(
-                    f"No PDF found on {start_url} for authenticated source {source.id}"
-                )
-
-            finally:
-                await browser.close()
+        return await run_in_proactor_thread(_do_session_discover)

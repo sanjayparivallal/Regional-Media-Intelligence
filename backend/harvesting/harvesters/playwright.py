@@ -41,6 +41,7 @@ from harvesting.utils import (
     calculate_sha256,
     make_newspaper_storage_path,
     substitute_date_in_url,
+    run_in_proactor_thread,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,35 +122,6 @@ def _is_captcha_page(content: str) -> bool:
     return any(ind in lower for ind in CAPTCHA_INDICATORS)
 
 
-def _loop_supports_subprocess() -> bool:
-    """Check if the current running event loop supports subprocess execution."""
-    try:
-        loop = asyncio.get_running_loop()
-        return type(loop).__name__ != "_WindowsSelectorEventLoop"
-    except Exception:
-        return False
-
-
-def _run_in_proactor_thread(coro_fn, *args, **kwargs):
-    """
-    Run an async coroutine in a separate thread with WindowsProactorEventLoopPolicy.
-    Ensures Playwright subprocess execution works on Windows even when uvicorn
-    runs with SelectorEventLoop (e.g. during --reload).
-    """
-    def _worker():
-        if sys.platform == "win32":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(coro_fn(*args, **kwargs))
-        finally:
-            loop.close()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        return executor.submit(_worker).result()
-
-
 class PlaywrightHarvester(BaseHarvester):
     """
     Browser-based harvester using Playwright.
@@ -176,18 +148,14 @@ class PlaywrightHarvester(BaseHarvester):
     ) -> str:
         """
         Open the source website in a headless browser and discover the PDF URL.
-        Dispatches to a ProactorEventLoop thread on Windows if the running loop
-        is SelectorEventLoop (such as under uvicorn --reload).
+        Dispatches to a ProactorEventLoop thread on Windows if needed.
         """
-        if not _loop_supports_subprocess():
-            return await asyncio.to_thread(
-                _run_in_proactor_thread,
-                self._discover_pdf_impl,
-                source,
-                edition,
-                target_date,
-            )
-        return await self._discover_pdf_impl(source, edition, target_date)
+        return await run_in_proactor_thread(
+            self._discover_pdf_impl,
+            source,
+            edition,
+            target_date,
+        )
 
     async def _discover_pdf_impl(
         self,
@@ -219,29 +187,30 @@ class PlaywrightHarvester(BaseHarvester):
                     "--disable-blink-features=AutomationControlled",
                 ],
             )
-            context = await browser.new_context(
-                viewport={"width": 1440, "height": 900},
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                locale="en-IN",
-                timezone_id="Asia/Kolkata",
-            )
-            page = await context.new_page()
+            try:
+                context = await browser.new_context(
+                    viewport={"width": 1440, "height": 900},
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    locale="en-IN",
+                    timezone_id="Asia/Kolkata",
+                )
+                page = await context.new_page()
 
-            discovered_url: Optional[str] = None
+                discovered_url: Optional[str] = None
 
-            # Intercept responses for PDF content
-            async def handle_response(response):
-                nonlocal discovered_url
-                content_type = response.headers.get("content-type", "")
-                if "pdf" in content_type and discovered_url is None:
-                    discovered_url = response.url
-                    logger.debug(f"PDF found via response intercept: {discovered_url}")
+                # Intercept responses for PDF content
+                async def handle_response(response):
+                    nonlocal discovered_url
+                    content_type = response.headers.get("content-type", "")
+                    if "pdf" in content_type and discovered_url is None:
+                        discovered_url = response.url
+                        logger.debug(f"PDF found via response intercept: {discovered_url}")
 
-            page.on("response", handle_response)
+                page.on("response", handle_response)
 
                 response = None
                 try:
@@ -350,18 +319,15 @@ class PlaywrightHarvester(BaseHarvester):
         1. Attempt discovery of direct PDF link & download.
         2. If direct PDF link is not present (e.g. dynamic web ePaper viewer),
            render the ePaper page directly to a broadsheet A3 PDF using Playwright.
-        Dispatches to a ProactorEventLoop thread on Windows if running under SelectorEventLoop.
+        Dispatches to a ProactorEventLoop thread on Windows if needed.
         """
-        if not _loop_supports_subprocess():
-            return await asyncio.to_thread(
-                _run_in_proactor_thread,
-                self._download_edition_impl,
-                source,
-                edition,
-                target_date,
-                storage,
-            )
-        return await self._download_edition_impl(source, edition, target_date, storage)
+        return await run_in_proactor_thread(
+            self._download_edition_impl,
+            source,
+            edition,
+            target_date,
+            storage,
+        )
 
     async def _download_edition_impl(
         self,
@@ -397,7 +363,7 @@ class PlaywrightHarvester(BaseHarvester):
                 raise enf
             start_url = substitute_date_in_url(url_template, target_date)
 
-            try:
+            async def _do_render():
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(
@@ -418,6 +384,7 @@ class PlaywrightHarvester(BaseHarvester):
                         locale="en-IN",
                         timezone_id="Asia/Kolkata",
                     )
+                    page = await context.new_page()
                     render_resp = None
                     try:
                         render_resp = await page.goto(start_url, wait_until="domcontentloaded", timeout=30_000)
@@ -453,8 +420,12 @@ class PlaywrightHarvester(BaseHarvester):
                         margin={"top": "10mm", "bottom": "10mm", "left": "10mm", "right": "10mm"},
                     )
                     await browser.close()
+
+            try:
+                await run_in_proactor_thread(_do_render)
             except Exception as render_err:
-                logger.error(f"Playwright fallback PDF render failed for {source.id}: {render_err}")
+                if not isinstance(render_err, EditionNotFound):
+                    logger.error(f"Playwright fallback PDF render failed for {source.id}: {render_err}")
                 raise enf
 
             # Validate rendered PDF

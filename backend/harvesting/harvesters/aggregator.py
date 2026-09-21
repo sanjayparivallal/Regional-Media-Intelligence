@@ -18,6 +18,7 @@ import httpx
 from harvesting.core.base import BaseHarvester
 from harvesting.core.models import EditionConfig, NewspaperSource
 from harvesting.exceptions import EditionNotFound
+from harvesting.utils import run_in_proactor_thread
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class AggregatorHarvester(BaseHarvester):
 
         # 2. Fall back to Playwright if HTTP failed or returned empty
         if not html:
-            try:
+            async def _pw_fetch():
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(
@@ -91,8 +92,12 @@ class AggregatorHarvester(BaseHarvester):
                     page = await context.new_page()
                     await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                     await page.wait_for_timeout(2000)
-                    html = await page.content()
+                    content = await page.content()
                     await browser.close()
+                    return content
+
+            try:
+                html = await run_in_proactor_thread(_pw_fetch)
             except Exception as pw_err:
                 logger.warning(f"Playwright navigation failed for {url}: {pw_err}")
 

@@ -90,3 +90,42 @@ def substitute_date_in_url(url_template: str, target_date: date) -> str:
         .replace("{dd}", f"{target_date.day:02d}")
         .replace("{d}", str(target_date.day))
     )
+
+
+async def run_in_proactor_thread(coro_fn, *args, **kwargs):
+    """
+    Execute an async coroutine on a dedicated Windows ProactorEventLoop thread.
+
+    When running under servers like Uvicorn with `--reload` on Windows, the active
+    event loop is forced to `_WindowsSelectorEventLoop`, which does not support
+    subprocesses (raising `NotImplementedError` in `loop.subprocess_exec` /
+    `_make_subprocess_transport`). Playwright requires a Proactor event loop to
+    launch browser binaries (Chromium, Firefox, WebKit).
+    """
+    import sys
+    import asyncio
+
+    if sys.platform != "win32":
+        return await coro_fn(*args, **kwargs)
+
+    try:
+        current_loop = asyncio.get_running_loop()
+        if isinstance(current_loop, getattr(asyncio, "ProactorEventLoop", ())):
+            return await coro_fn(*args, **kwargs)
+    except RuntimeError:
+        pass
+
+    def _runner():
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro_fn(*args, **kwargs))
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+    return await asyncio.to_thread(_runner)
+
