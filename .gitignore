@@ -29,8 +29,10 @@ env/
 *.db-wal
 data/
 backend/data/
-storage/
-backend/storage/
+/storage/
+backend/storage/uploads/
+backend/storage/pages/
+backend/storage/newspapers/
 uploads/
 backend/uploads/
 *.xlsx
@@ -56,6 +58,8 @@ backend/dist_models/
 # Testing Codes, Scripts & Test Artifacts
 test_*.py
 *_test.py
+!backend/tests/*.py
+!tests/*.py
 test_temp.*
 backend/test_temp.*
 test_*.png

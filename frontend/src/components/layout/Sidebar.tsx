@@ -9,6 +9,7 @@ import {
   Tag,
   Flame,
   UploadCloud,
+  DownloadCloud,
   FileText,
   Cpu,
   CheckSquare,
@@ -35,6 +36,7 @@ const navSections = [
   {
     label: "OPERATIONS",
     items: [
+      { href: "/harvesting", icon: DownloadCloud, label: "ePaper Harvesting" },
       { href: "/ingestion", icon: UploadCloud, label: "Ingestion" },
       { href: "/documents", icon: FileText, label: "Documents" },
       { href: "/processing", icon: Cpu, label: "Processing" },

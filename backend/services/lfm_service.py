@@ -16,12 +16,13 @@ from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
-# Default Ollama endpoint
+# Default Ollama endpoint & LFM 2.5 model
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "LiquidAI/lfm2.5-2.6b:q4_k_m"
 
 
 # --- Pydantic models for LFM structured output ---
+
 
 class LFMEntityResult(BaseModel):
     """Validated entity verification output."""
@@ -202,7 +203,17 @@ class LFMService:
     ) -> str:
         """Build structured analysis prompt for LFM."""
         entity_list = ", ".join(entities) if entities else "none detected"
-        brand_ctx = f"Focus brand: {brand_name}." if brand_name else ""
+        if brand_name:
+            brand_ctx = (
+                f"TARGET COMPANY TO ANALYZE: '{brand_name}'.\n"
+                f"Carefully examine the article specifically for any negative news, financial loss, regulatory action, "
+                f"penalty, lawsuit, scam, fraud, safety issue, or risk concerning '{brand_name}'.\n"
+                f"If negative news exists about '{brand_name}', set sentiment to 'negative', crisis to true, "
+                f"and write a summary clearly highlighting the exact negative information regarding '{brand_name}'.\n"
+                f"If there is NO negative news about '{brand_name}', set sentiment to 'neutral' or 'positive' and crisis to false."
+            )
+        else:
+            brand_ctx = "Analyze general news and company mentions."
 
         return f"""Analyze this news article and respond with ONLY valid JSON.
 
@@ -231,7 +242,7 @@ Respond with this exact JSON structure:
     "severity": 0.7
   }},
   "summary": {{
-    "summary": "one paragraph summary"
+    "summary": "specific negative information or summary regarding the target company"
   }}
 }}
 

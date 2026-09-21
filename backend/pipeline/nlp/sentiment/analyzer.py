@@ -46,13 +46,15 @@ def _get_transformer_pipeline():
         disable_progress_bar()
         
         settings = get_settings()
+        cls_path = getattr(settings, "classification_model_path", None)
         local_path = (
-            Path(settings.classification_model_path)
-            if settings.classification_model_path
+            Path(cls_path)
+            if cls_path
             else Path(__file__).resolve().parent.parent.parent.parent
             / "model_assets" / "sentiment"
         )
-        model_target = str(local_path) if local_path.exists() else settings.sentiment_model
+        sentiment_model_name = getattr(settings, "sentiment_model", "cardiffnlp/twitter-xlm-roberta-base-sentiment-multilingual")
+        model_target = str(local_path) if local_path.exists() else sentiment_model_name
         
         import torch
         device_id = 0 if torch.cuda.is_available() else -1

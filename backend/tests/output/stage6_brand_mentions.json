@@ -1,0 +1,20 @@
+{
+  "stage": "Stage 6: Brand Mention Detection",
+  "monitored_brands_count": 10,
+  "total_brand_mentions_found": 1,
+  "results": [
+    {
+      "article_id": 1,
+      "matches": [
+        {
+          "brand_id": "e0239ef0-6cd3-4653-aa7a-7d3d6aa41ffe",
+          "brand_name": "Adani",
+          "matched_text": "Adani",
+          "match_type": "exact",
+          "confidence": 0.98,
+          "context_snippet": "Ifyou need recent negative Adani-related news for a sentiment-analysis test; these are useful examples: Adani En"
+        }
+      ]
+    }
+  ]
+}

@@ -101,12 +101,11 @@ class OCRService:
         if key not in self._easyocr_readers:
             try:
                 import easyocr
-                has_local_weights = MODEL_DIR.exists() and any(MODEL_DIR.glob("*.pth"))
                 reader = easyocr.Reader(
                     list(key),
                     gpu=self._gpu_available,
                     model_storage_directory=str(MODEL_DIR),
-                    download_enabled=not has_local_weights,
+                    download_enabled=True,
                     verbose=False,
                 )
                 self._easyocr_readers[key] = reader

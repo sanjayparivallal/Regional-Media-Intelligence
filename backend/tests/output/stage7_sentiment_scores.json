@@ -1,0 +1,26 @@
+{
+  "stage": "Stage 7: Sentiment Analysis",
+  "model": "cardiffnlp/twitter-xlm-roberta-base-sentiment-multilingual",
+  "overall": {
+    "label": "neutral",
+    "confidence": 89.6797,
+    "scores": {
+      "negative": 5.8669,
+      "neutral": 89.6797,
+      "positive": 4.4534
+    }
+  },
+  "by_article": [
+    {
+      "article_id": 1,
+      "label": "neutral",
+      "confidence": 89.6797,
+      "scores": {
+        "negative": 5.8669,
+        "neutral": 89.6797,
+        "positive": 4.4534
+      },
+      "headline_sample": "Ifyou need recent negative Adani-related news for a sentiment-analysis test; the..."
+    }
+  ]
+}

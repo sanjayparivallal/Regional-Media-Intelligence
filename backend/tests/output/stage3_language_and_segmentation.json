@@ -1,0 +1,18 @@
+{
+  "stage": "Stage 3: Language Detection & Article Segmentation",
+  "detected_language": "en",
+  "confidence": 100.0,
+  "language_distribution": [
+    {
+      "language": "en",
+      "confidence": 100.0
+    }
+  ],
+  "segmented_articles_count": 1,
+  "articles": [
+    {
+      "article_id": 1,
+      "text": "Ifyou need recent negative Adani-related news for a sentiment-analysis test; these are useful examples: Adani Enterprises reported a second consecutive quarterly loss in July 2026. The company reported a consolidated net loss of {11.60 billion for the quarter ended June 30, 2026, partly due to a one-time charge related to a U.S. sanctions settlement MarketScreener India SEBI continued enforcement activity connected to the broader Adani/Hindenburg matter In September 2026, Reuters reported that SEBI was pursuing recovery of gains it believes were linked to trades made before the Hindenburg report Reuters Adani Ports executives settled disclosure-violation allegations. SEBI reportedly settled allegations involving the company's CEO and CFO, with each paying {1.37 million without admitting fault: The Economic Times Adani Group shares experienced significant volatility: Several Adani stocks fell sharply around the August-September 2026 period amid market and index-related developments mint Earlier in 2026, Adani Group stocks fell as much as 10% after the US. SEC sought permission to serve summons on Gautam Adani and Adani in a civil proceeding: The Times of India Sagar"
+    }
+  ]
+}

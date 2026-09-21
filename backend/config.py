@@ -31,22 +31,18 @@ class Settings(BaseSettings):
     page_image_path: str = "./storage/pages"
 
     # --- OCR ---
-    ocr_engine: str = "auto"  # auto | paddleocr | tesseract | easyocr | hybrid
-    ocr_model_path: str = ""
+    ocr_engine: str = "indic-ocr"  # indic-ocr | auto | easyocr | paddleocr
+    ocr_model_path: str = "./models/indic-ocr"
     tesseract_path: str = ""
     ocr_confidence_threshold: int = 90
 
     # --- Translation ---
-    translation_model: str = "facebook/nllb-200-distilled-600M"
-    translation_model_path: str = ""
+    translation_model: str = "ai4bharat/indictrans2-indic-en-1B"
+    translation_model_path: str = "./models/indictrans2"
 
-    # --- NER ---
-    ner_model_path: str = ""
-    spacy_model: str = "en_core_web_sm"
-
-    # --- Sentiment ---
-    sentiment_model: str = "cardiffnlp/twitter-xlm-roberta-base-sentiment-multilingual"
-    classification_model_path: str = ""
+    # --- LFM 2.5 (Ollama) ---
+    ollama_url: str = "http://localhost:11434/api/generate"
+    lfm_model_name: str = "LiquidAI/lfm2.5-2.6b:q4_k_m"
 
     # --- Server ---
     backend_host: str = "0.0.0.0"
@@ -65,6 +61,12 @@ class Settings(BaseSettings):
     # --- Processing ---
     max_upload_size_mb: int = 100
     processing_workers: int = 2
+
+    # --- Harvesting ---
+    harvest_schedule: str = "06:30"           # HH:MM in harvest_timezone
+    harvest_timezone: str = "Asia/Kolkata"
+    harvest_max_concurrency: int = 5          # Parallel source downloads
+    harvest_newspapers_config: str = "./harvesting/config/newspapers.json"
 
     @property
     def max_upload_size_bytes(self) -> int:

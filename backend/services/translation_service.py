@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-MODEL_DIR = BASE_DIR / "models" / "indictrans2"
+MODEL_DIR = BASE_DIR / "backend" / "model_assets" / "translation"
+if not MODEL_DIR.exists():
+    MODEL_DIR = BASE_DIR / "models" / "indictrans2"
 
 
 @dataclass

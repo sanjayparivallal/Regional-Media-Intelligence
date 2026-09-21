@@ -1,0 +1,60 @@
+{
+  "target_image": "D:\\projects\\vee\\backend\\storage\\uploads\\7d4473f0-2884-49cf-bd9f-00b82d710969.jpeg",
+  "timestamp": "2026-09-20 20:18:10",
+  "stages": {
+    "stage1_preprocessing": "SUCCESS",
+    "stage2_ocr": {
+      "status": "SUCCESS",
+      "total_blocks": 26,
+      "char_count": 1183,
+      "confidence": 86.14
+    },
+    "stage3_language_and_segmentation": {
+      "status": "SUCCESS",
+      "language": "en",
+      "articles_segmented": 1
+    },
+    "stage4_translation": "SUCCESS",
+    "stage5_ner": {
+      "status": "SUCCESS",
+      "entity_count": 38,
+      "organizations": [
+        "Adani Ports",
+        "Adani Group",
+        "vi",
+        "Adani Enterprises",
+        "Adani",
+        "CEO",
+        "The Times of India\n",
+        "SEC",
+        "Reuters",
+        "ola",
+        "The Economic Times\nAdani Group",
+        "Adani/Hindenburg",
+        "MarketScreener",
+        "CFO"
+      ],
+      "persons": [
+        "Gautam Adani",
+        "Sagar"
+      ]
+    },
+    "stage6_brand_matching": {
+      "status": "SUCCESS",
+      "total_mentions": 1
+    },
+    "stage7_sentiment": {
+      "status": "SUCCESS",
+      "overall_label": "neutral",
+      "negative_score": 5.8669
+    },
+    "stage8_crisis_scoring": {
+      "status": "SUCCESS",
+      "high_risk_count": 1
+    },
+    "stage9_alerts": {
+      "status": "SUCCESS",
+      "alerts_count": 1
+    }
+  }
+}

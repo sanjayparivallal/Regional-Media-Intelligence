@@ -1,0 +1,20 @@
+{
+  "stage": "Stage 1: Preprocessing",
+  "input_image": "D:\\projects\\vee\\backend\\storage\\uploads\\7d4473f0-2884-49cf-bd9f-00b82d710969.jpeg",
+  "output_image": "D:\\projects\\vee\\backend\\tests\\output\\stage1_preprocessed.png",
+  "quality_metrics": {
+    "brightness": 23.0,
+    "contrast": 63.2,
+    "sharpness": 77.3,
+    "noise_level": 0.0,
+    "is_skewed": false,
+    "skew_angle": 0.0,
+    "needs_preprocessing": true,
+    "recommended_operations": [
+      "contrast_enhancement"
+    ]
+  },
+  "operations_applied": [
+    "contrast_enhancement"
+  ]
+}

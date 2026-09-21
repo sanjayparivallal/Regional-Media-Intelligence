@@ -1,0 +1,633 @@
+{
+  "stage": "Stage 2: OCR Extraction",
+  "engine": "easyocr",
+  "overall_confidence": 86.14,
+  "total_blocks": 26,
+  "total_characters": 1183,
+  "blocks": [
+    {
+      "block_id": 1,
+      "text": "Ifyou need recent negative Adani-related news for a sentiment-analysis test; these are",
+      "confidence": 72.77,
+      "bounding_box": [
+        [
+          20,
+          18
+        ],
+        [
+          804,
+          18
+        ],
+        [
+          804,
+          49
+        ],
+        [
+          20,
+          49
+        ]
+      ],
+      "line_num": 0
+    },
+    {
+      "block_id": 2,
+      "text": "useful examples:",
+      "confidence": 58.53,
+      "bounding_box": [
+        [
+          20,
+          52
+        ],
+        [
+          174,
+          52
+        ],
+        [
+          174,
+          80
+        ],
+        [
+          20,
+          80
+        ]
+      ],
+      "line_num": 1
+    },
+    {
+      "block_id": 3,
+      "text": "Adani Enterprises reported a second consecutive quarterly loss in July 2026.",
+      "confidence": 95.86,
+      "bounding_box": [
+        [
+          54,
+          88
+        ],
+        [
+          742,
+          88
+        ],
+        [
+          742,
+          119
+        ],
+        [
+          54,
+          119
+        ]
+      ],
+      "line_num": 2
+    },
+    {
+      "block_id": 4,
+      "text": "The company reported a consolidated net loss of {11.60 billion for the quarter",
+      "confidence": 78.96,
+      "bounding_box": [
+        [
+          54,
+          121
+        ],
+        [
+          750,
+          121
+        ],
+        [
+          750,
+          151
+        ],
+        [
+          54,
+          151
+        ]
+      ],
+      "line_num": 3
+    },
+    {
+      "block_id": 5,
+      "text": "ended June 30, 2026, partly due to a one-time charge related to a U.S. sanctions",
+      "confidence": 58.16,
+      "bounding_box": [
+        [
+          54,
+          154
+        ],
+        [
+          766,
+          154
+        ],
+        [
+          766,
+          183
+        ],
+        [
+          54,
+          183
+        ]
+      ],
+      "line_num": 4
+    },
+    {
+      "block_id": 6,
+      "text": "settlement",
+      "confidence": 95.07,
+      "bounding_box": [
+        [
+          52,
+          188
+        ],
+        [
+          158,
+          188
+        ],
+        [
+          158,
+          212
+        ],
+        [
+          52,
+          212
+        ]
+      ],
+      "line_num": 5
+    },
+    {
+      "block_id": 7,
+      "text": "MarketScreener India",
+      "confidence": 88.83,
+      "bounding_box": [
+        [
+          188,
+          195
+        ],
+        [
+          301,
+          195
+        ],
+        [
+          301,
+          209
+        ],
+        [
+          188,
+          209
+        ]
+      ],
+      "line_num": 6
+    },
+    {
+      "block_id": 8,
+      "text": "SEBI continued enforcement activity connected to the broader Adani/Hindenburg",
+      "confidence": 85.16,
+      "bounding_box": [
+        [
+          52,
+          226
+        ],
+        [
+          800,
+          226
+        ],
+        [
+          800,
+          258
+        ],
+        [
+          52,
+          258
+        ]
+      ],
+      "line_num": 7
+    },
+    {
+      "block_id": 9,
+      "text": "matter In September 2026, Reuters reported that SEBI was pursuing recovery of gains",
+      "confidence": 82.56,
+      "bounding_box": [
+        [
+          54,
+          262
+        ],
+        [
+          816,
+          262
+        ],
+        [
+          816,
+          291
+        ],
+        [
+          54,
+          291
+        ]
+      ],
+      "line_num": 8
+    },
+    {
+      "block_id": 10,
+      "text": "it believes were linked to trades made before the",
+      "confidence": 93.19,
+      "bounding_box": [
+        [
+          52,
+          294
+        ],
+        [
+          492,
+          294
+        ],
+        [
+          492,
+          320
+        ],
+        [
+          52,
+          320
+        ]
+      ],
+      "line_num": 9
+    },
+    {
+      "block_id": 11,
+      "text": "Hindenburg report",
+      "confidence": 60.76,
+      "bounding_box": [
+        [
+          487,
+          288
+        ],
+        [
+          667,
+          288
+        ],
+        [
+          667,
+          325
+        ],
+        [
+          487,
+          325
+        ]
+      ],
+      "line_num": 10
+    },
+    {
+      "block_id": 12,
+      "text": "Reuters",
+      "confidence": 99.99,
+      "bounding_box": [
+        [
+          697,
+          303
+        ],
+        [
+          741,
+          303
+        ],
+        [
+          741,
+          317
+        ],
+        [
+          697,
+          317
+        ]
+      ],
+      "line_num": 11
+    },
+    {
+      "block_id": 13,
+      "text": "Adani Ports executives settled disclosure-violation allegations. SEBI reportedly",
+      "confidence": 78.03,
+      "bounding_box": [
+        [
+          54,
+          337
+        ],
+        [
+          764,
+          337
+        ],
+        [
+          764,
+          366
+        ],
+        [
+          54,
+          366
+        ]
+      ],
+      "line_num": 12
+    },
+    {
+      "block_id": 14,
+      "text": "settled allegations involving the company's CEO and CFO, with each paying {1.37",
+      "confidence": 78.68,
+      "bounding_box": [
+        [
+          52,
+          366
+        ],
+        [
+          776,
+          366
+        ],
+        [
+          776,
+          398
+        ],
+        [
+          52,
+          398
+        ]
+      ],
+      "line_num": 13
+    },
+    {
+      "block_id": 15,
+      "text": "million without admitting fault:",
+      "confidence": 86.96,
+      "bounding_box": [
+        [
+          54,
+          401
+        ],
+        [
+          332,
+          401
+        ],
+        [
+          332,
+          430
+        ],
+        [
+          54,
+          430
+        ]
+      ],
+      "line_num": 14
+    },
+    {
+      "block_id": 16,
+      "text": "The Economic Times",
+      "confidence": 93.13,
+      "bounding_box": [
+        [
+          363,
+          409
+        ],
+        [
+          473,
+          409
+        ],
+        [
+          473,
+          423
+        ],
+        [
+          363,
+          423
+        ]
+      ],
+      "line_num": 15
+    },
+    {
+      "block_id": 17,
+      "text": "Adani Group shares experienced significant volatility: Several Adani stocks fell sharply",
+      "confidence": 99.03,
+      "bounding_box": [
+        [
+          54,
+          440
+        ],
+        [
+          826,
+          440
+        ],
+        [
+          826,
+          473
+        ],
+        [
+          54,
+          473
+        ]
+      ],
+      "line_num": 16
+    },
+    {
+      "block_id": 18,
+      "text": "around the August-September 2026 period amid market and index-related",
+      "confidence": 96.58,
+      "bounding_box": [
+        [
+          54,
+          475
+        ],
+        [
+          722,
+          475
+        ],
+        [
+          722,
+          507
+        ],
+        [
+          54,
+          507
+        ]
+      ],
+      "line_num": 17
+    },
+    {
+      "block_id": 19,
+      "text": "developments",
+      "confidence": 100.0,
+      "bounding_box": [
+        [
+          53,
+          508
+        ],
+        [
+          186,
+          508
+        ],
+        [
+          186,
+          537
+        ],
+        [
+          53,
+          537
+        ]
+      ],
+      "line_num": 18
+    },
+    {
+      "block_id": 20,
+      "text": "mint",
+      "confidence": 99.56,
+      "bounding_box": [
+        [
+          219,
+          519
+        ],
+        [
+          249,
+          519
+        ],
+        [
+          249,
+          531
+        ],
+        [
+          219,
+          531
+        ]
+      ],
+      "line_num": 19
+    },
+    {
+      "block_id": 21,
+      "text": "Earlier in 2026, Adani Group stocks fell as much as 10% after the US. SEC sought",
+      "confidence": 58.27,
+      "bounding_box": [
+        [
+          54,
+          550
+        ],
+        [
+          778,
+          550
+        ],
+        [
+          778,
+          581
+        ],
+        [
+          54,
+          581
+        ]
+      ],
+      "line_num": 20
+    },
+    {
+      "block_id": 22,
+      "text": "permission to serve summons on Gautam Adani and",
+      "confidence": 91.8,
+      "bounding_box": [
+        [
+          53,
+          583
+        ],
+        [
+          522,
+          583
+        ],
+        [
+          522,
+          612
+        ],
+        [
+          53,
+          612
+        ]
+      ],
+      "line_num": 21
+    },
+    {
+      "block_id": 23,
+      "text": "Adani in a civil",
+      "confidence": 99.42,
+      "bounding_box": [
+        [
+          576,
+          584
+        ],
+        [
+          710,
+          584
+        ],
+        [
+          710,
+          610
+        ],
+        [
+          576,
+          610
+        ]
+      ],
+      "line_num": 22
+    },
+    {
+      "block_id": 24,
+      "text": "proceeding:",
+      "confidence": 89.92,
+      "bounding_box": [
+        [
+          54,
+          618
+        ],
+        [
+          164,
+          618
+        ],
+        [
+          164,
+          646
+        ],
+        [
+          54,
+          646
+        ]
+      ],
+      "line_num": 23
+    },
+    {
+      "block_id": 25,
+      "text": "The Times of India",
+      "confidence": 99.45,
+      "bounding_box": [
+        [
+          195,
+          625
+        ],
+        [
+          293,
+          625
+        ],
+        [
+          293,
+          639
+        ],
+        [
+          195,
+          639
+        ]
+      ],
+      "line_num": 24
+    },
+    {
+      "block_id": 26,
+      "text": "Sagar",
+      "confidence": 99.02,
+      "bounding_box": [
+        [
+          521,
+          581
+        ],
+        [
+          579,
+          589
+        ],
+        [
+          574,
+          615
+        ],
+        [
+          517,
+          607
+        ]
+      ],
+      "line_num": 25
+    }
+  ]
+}

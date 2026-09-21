@@ -34,18 +34,20 @@ def _get_spacy_model():
         from pathlib import Path
         from config import get_settings
         settings = get_settings()
+        ner_path = getattr(settings, "ner_model_path", None)
         local_path = (
-            Path(settings.ner_model_path)
-            if settings.ner_model_path
+            Path(ner_path)
+            if ner_path
             else Path(__file__).resolve().parent.parent.parent.parent
             / "model_assets" / "spacy_en"
         )
-        if local_path.exists():
+        if local_path.exists() and (local_path / "meta.json").exists():
             _SPACY_MODEL = spacy.load(str(local_path))
             logger.info(f"Loaded spaCy from local assets: {local_path}")
         else:
-            _SPACY_MODEL = spacy.load(settings.spacy_model)
-            logger.info(f"Loaded spaCy {settings.spacy_model}")
+            fallback_model = getattr(settings, "spacy_model", "en_core_web_sm")
+            _SPACY_MODEL = spacy.load(fallback_model)
+            logger.info(f"Loaded spaCy {fallback_model}")
     except Exception as e:
         # Log once at INFO; subsequent calls return None silently.
         logger.info(f"Using default regex extraction (spaCy not available: {e})")

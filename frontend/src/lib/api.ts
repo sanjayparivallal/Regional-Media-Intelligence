@@ -141,4 +141,56 @@ export const api = {
 
   // System
   getSystemInfo: () => fetchAPI<any>('/system/info'),
+
+  // ─── Harvesting ────────────────────────────────────────────────────────────
+
+  /** List all configured newspaper sources with last harvest state. */
+  getHarvestingSources: () => fetchAPI<any[]>('/harvesting/sources'),
+
+  /** Enable or disable a source (session-only; edit newspapers.json to persist). */
+  patchHarvestingSource: (sourceId: string, data: { enabled?: boolean }) =>
+    fetchAPI<any>(`/harvesting/sources/${sourceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * Trigger a harvest immediately.
+   * Returns { job_id, status, poll_url } — use getHarvestJob to poll progress.
+   */
+  runHarvest: (body?: {
+    target_date?: string;
+    source_ids?: string[];
+    triggered_by?: string;
+  }) =>
+    fetchAPI<any>('/harvesting/run', {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+
+  /**
+   * Trigger the scheduled harvest run immediately (same as daily cron).
+   * Useful for recovering missed harvests or manual testing.
+   */
+  runScheduledHarvestNow: () =>
+    fetchAPI<any>('/harvesting/run/scheduled', { method: 'POST' }),
+
+  /** List recent harvest jobs (newest first). */
+  getHarvestJobs: (limit = 50) =>
+    fetchAPI<any[]>(`/harvesting/jobs?limit=${limit}`),
+
+  /** Get harvest job detail including per-source attempt breakdown. */
+  getHarvestJob: (jobId: string) => fetchAPI<any>(`/harvesting/jobs/${jobId}`),
+
+  /** List documents downloaded by the harvesting system. */
+  getHarvestDocuments: (sourceId?: string) => {
+    const q = sourceId ? `?source_id=${encodeURIComponent(sourceId)}` : '';
+    return fetchAPI<any[]>(`/harvesting/documents${q}`);
+  },
+
+  /** Get reauthentication instructions for an auth-required source. */
+  requestReauthenticate: (sourceId: string) =>
+    fetchAPI<any>(`/harvesting/sources/${sourceId}/reauthenticate`, {
+      method: 'POST',
+    }),
 };

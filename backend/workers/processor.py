@@ -24,9 +24,11 @@ import logging
 import time
 import uuid
 import asyncio
+import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Tuple, List, Dict, Any, Optional
 import json
 
 from config import get_settings
@@ -42,8 +44,119 @@ from services.lfm_service import LFMService
 from services.confidence_service import ConfidenceService
 from services.review_service import ReviewService
 from pipeline.nlp.sentiment.analyzer import SentimentAnalyzer
+from pipeline.nlp.entity.brand_matcher import BrandMatch
 
 logger = logging.getLogger(__name__)
+
+# Keywords signaling negative news and crises for company-specific intelligence
+_NEGATIVE_KEYWORDS = {
+    "REGULATORY": [
+        "sebi", "rbi", "ed", "cbi", "sec", "probe", "investigation", "inquiry",
+        "penalty", "fine", "penalized", "raid", "raided", "notice", "summons",
+        "ban", "banned", "sanction", "sanctions", "enforcement", "violation",
+        "violations", "chargesheet", "compliance failure", "irregularities",
+        "scrutiny", "show-cause", "licence cancelled", "license cancelled"
+    ],
+    "LEGAL": [
+        "lawsuit", "court", "petition", "fir", "arrest", "arrested", "guilty",
+        "scam", "fraud", "bribe", "bribery", "corruption", "hindenburg",
+        "charges", "convicted", "dispute", "litigation", "allegations",
+        "settled allegations", "disclosure-violation", "disclosure violation"
+    ],
+    "FINANCIAL": [
+        "quarterly loss", "net loss", "loss of", "losses", "fell sharply",
+        "fell as much as", "stocks fell", "shares fell", "shares dropped",
+        "plunged", "plunge", "slump", "slumped", "deficit", "default",
+        "debt default", "bankruptcy", "insolvent", "insolvency", "downgrade",
+        "downgraded", "crash", "crashed", "erosion", "under debt"
+    ],
+    "SAFETY_OPERATIONAL": [
+        "strike", "protests", "protest", "fire", "accident", "explosion",
+        "boycott", "data breach", "leak", "shutdown", "layoffs", "laid off",
+        "scandal", "fatal", "casualties"
+    ]
+}
+
+
+def _get_company_context(text: str, target: str, window: int = 300) -> str:
+    """Extract context snippet around target in text."""
+    idx = text.lower().find(target.lower())
+    if idx == -1:
+        return text[:window]
+    start = max(0, idx - 150)
+    end = min(len(text), idx + len(target) + 150)
+    return text[start:end].strip()
+
+
+def _extract_company_negative_info(
+    full_text: str,
+    company_name: str,
+    aliases: List[str],
+    fallback_snippet: str = ""
+) -> Tuple[str, str, bool, str, str]:
+    """
+    Scans full_text specifically for mentions of company_name and its aliases.
+    Extracts:
+    1. company_context: sentences mentioning the company and adjacent context
+    2. neg_info: specific extracted sentences containing negative news about this company
+    3. is_negative: bool flag indicating whether negative news was identified
+    4. category: crisis/negative category (e.g. REGULATORY, LEGAL, FINANCIAL, etc.)
+    5. reason: short explanation of negative information
+    """
+    if not full_text:
+        return "", "", False, "NONE", ""
+
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?\n])\s+', full_text) if s.strip()]
+    if not sentences:
+        sentences = [full_text]
+
+    names_to_match = [company_name.lower()] + [a.lower() for a in aliases if a]
+
+    matched_indices = []
+    for i, s in enumerate(sentences):
+        s_lower = s.lower()
+        if any(nm in s_lower for nm in names_to_match):
+            matched_indices.append(i)
+
+    if not matched_indices:
+        ctx = fallback_snippet or _get_company_context(full_text, company_name)
+        comp_sentences = [ctx]
+    else:
+        expanded_indices = set()
+        for idx in matched_indices:
+            for offset in (-1, 0, 1):
+                cur = idx + offset
+                if 0 <= cur < len(sentences):
+                    expanded_indices.add(cur)
+        comp_sentences = [sentences[i] for i in sorted(expanded_indices)]
+
+    company_context = " ".join(comp_sentences)
+    detected_neg_sentences = []
+    detected_category = "NONE"
+    detected_reason = ""
+    is_negative = False
+
+    for s in comp_sentences:
+        s_lower = s.lower()
+        # Only consider sentences that explicitly mention THIS target company or its aliases
+        if not any(nm in s_lower for nm in names_to_match):
+            continue
+
+        found_cats = []
+        for cat, kw_list in _NEGATIVE_KEYWORDS.items():
+            for kw in kw_list:
+                pattern = r'\b' + re.escape(kw) + r'\b'
+                if re.search(pattern, s_lower):
+                    found_cats.append((cat, kw))
+        if found_cats:
+            detected_neg_sentences.append(s)
+            is_negative = True
+            if detected_category == "NONE":
+                detected_category = found_cats[0][0]
+                detected_reason = f"Identified in relation to {found_cats[0][1]}"
+
+    neg_info = " ".join(detected_neg_sentences) if (is_negative and detected_neg_sentences) else ""
+    return company_context, neg_info, is_negative, detected_category, detected_reason
 settings = get_settings()
 
 _processing_semaphore = asyncio.Semaphore(1)
@@ -385,7 +498,7 @@ async def process_document_task(document_id: str, job_id: str):
                     "progress_percent": round(p3_progress, 1)
                 })
 
-                # Entity detection
+                # Entity detection — scan page for all named entities
                 from pipeline.nlp.entity.extractor import EntityExtractor
                 entity_extractor = EntityExtractor()
                 detected_entities = await asyncio.to_thread(
@@ -393,74 +506,7 @@ async def process_document_task(document_id: str, job_id: str):
                 )
                 entity_texts = [e.text for e in detected_entities]
 
-                # Brand matching
-                from pipeline.nlp.entity.brand_matcher import BrandMatcher
-                brand_matcher = BrandMatcher()
-                brand_matcher.load_brands(brand_dicts)
-                brand_matches = brand_matcher.match(translated_text, entity_texts)
-
-                # LFM sentiment + crisis analysis
-                lfm_status = "skipped"
-                lfm_sentiment = "NEUTRAL"
-                lfm_sent_conf = 50.0
-                lfm_crisis = False
-                lfm_crisis_topic = "GENERAL"
-                lfm_crisis_severity = 0.0
-                lfm_summary = ext_article.headline or ""
-                primary_brand = brand_matches[0].brand_name if brand_matches else None
-
-                if brand_matches and _lfm_service.is_available():
-                    try:
-                        lfm_result = await asyncio.to_thread(
-                            _lfm_service.analyze,
-                            translated_text,
-                            entity_texts,
-                            primary_brand
-                        )
-                        if lfm_result and lfm_result.status == "success":
-                            lfm_status = "success"
-                            lfm_sentiment = str(lfm_result.sentiment.get("sentiment", "NEUTRAL")).upper()
-                            lfm_sent_conf = float(lfm_result.sentiment.get("confidence", 0.5) * 100)
-                            lfm_crisis = bool(lfm_result.crisis.get("crisis", False))
-                            lfm_crisis_topic = str(lfm_result.crisis.get("category", "GENERAL"))
-                            lfm_crisis_severity = float(lfm_result.crisis.get("severity", 0.0))
-                            lfm_summary = lfm_result.summary or ext_article.headline
-                    except Exception as e:
-                        logger.warning(f"LFM analysis failed: {e}")
-
-                # Fallback to local SentimentAnalyzer
-                if lfm_status != "success":
-                    try:
-                        sent_res = await asyncio.to_thread(
-                            _sentiment_analyzer.analyze,
-                            ext_article.full_text,
-                            translated_text,
-                            detected_lang
-                        )
-                        lfm_sentiment = str(sent_res.label).upper()
-                        lfm_sent_conf = float(sent_res.confidence)
-                        lfm_status = "success"
-                        lfm_summary = ext_article.headline
-                    except Exception as e:
-                        logger.warning(f"Sentiment fallback failed: {e}")
-
-                # Save AI Analysis
-                excel.append_row("AIAnalysis", {
-                    "analysis_id": str(uuid.uuid4()),
-                    "article_id": article_id,
-                    "brand_name": primary_brand or "General",
-                    "summary": lfm_summary or ext_article.headline,
-                    "sentiment": lfm_sentiment,
-                    "sentiment_confidence": lfm_sent_conf,
-                    "crisis_category": lfm_crisis_topic if lfm_crisis else "NONE",
-                    "crisis_reason": "Automated AI Analysis",
-                    "ai_confidence": lfm_sent_conf,
-                    "model_name": "lfm-sentiment-pipeline",
-                    "created_at": datetime.utcnow().isoformat()
-                })
-                doc_sentiments.append(lfm_sentiment)
-
-                # Save entities
+                # Save all detected entities to storage
                 for ent in detected_entities:
                     excel.append_row("Entities", {
                         "entity_id": str(uuid.uuid4()),
@@ -472,15 +518,133 @@ async def process_document_task(document_id: str, job_id: str):
                         "end_position": ent.end,
                         "confidence": ent.confidence,
                         "is_monitored_brand": ent.text in monitored_brand_names,
-                        "verification_status": "verified" if lfm_status == "success" else "unverified",
+                        "verification_status": "verified" if ent.text in monitored_brand_names else "unverified",
                         "created_at": datetime.utcnow().isoformat()
                     })
 
-                # Risk scoring + alerts per brand mention
-                for brand_match in brand_matches:
-                    sentiment_severity = 100 if lfm_sentiment == "NEGATIVE" else (50 if lfm_sentiment == "NEUTRAL" else 0)
-                    brand_relevance = 80
-                    crisis_severity = lfm_crisis_severity if lfm_crisis else 0.0
+                # Brand matching — scan for companies and verify against provided list
+                from pipeline.nlp.entity.brand_matcher import BrandMatcher
+                brand_matcher = BrandMatcher()
+                brand_matcher.load_brands(brand_dicts)
+                brand_matches = brand_matcher.match(translated_text, entity_texts)
+
+                # Group verified company matches by their canonical name in the provided list
+                verified_companies: Dict[str, List[BrandMatch]] = {}
+                for bm in brand_matches:
+                    bname = bm.brand_name
+                    if bname not in verified_companies:
+                        verified_companies[bname] = []
+                    verified_companies[bname].append(bm)
+
+                # Also verify any detected organization/brand entities against the provided list
+                for ent in detected_entities:
+                    if ent.entity_type in ("ORGANIZATION", "BRAND") or getattr(ent, "is_monitored_brand", False):
+                        ent_lower = ent.text.strip().lower()
+                        for b in brands:
+                            b_name = b["brand_name"]
+                            aliases_str = b.get("aliases") or ""
+                            b_aliases = [a.strip().lower() for a in aliases_str.split(",") if a.strip()]
+                            if ent_lower == b_name.lower() or ent_lower in b_aliases:
+                                if b_name not in verified_companies:
+                                    bm = BrandMatch(
+                                        brand_id=str(b["brand_id"]),
+                                        brand_name=b_name,
+                                        matched_text=ent.text,
+                                        match_type="entity",
+                                        confidence=ent.confidence or 0.90,
+                                        context_snippet=_get_company_context(translated_text, ent.text),
+                                    )
+                                    verified_companies[b_name] = [bm]
+                                break
+
+                lfm_status = "skipped"
+
+                # For EACH company in the provided list that was verified on this page:
+                # Extract relevant negative information and record clearly per company.
+                for company_name, matches_list in verified_companies.items():
+                    primary_match = matches_list[0]
+                    c_brand_obj = next((b for b in brands if b["brand_name"].lower() == company_name.lower()), None)
+                    c_aliases = []
+                    if c_brand_obj:
+                        raw_aliases = c_brand_obj.get("aliases") or ""
+                        c_aliases = [a.strip() for a in raw_aliases.split(",") if a.strip()]
+
+                    # Extract context & negative information specifically for this company
+                    company_context, neg_info, auto_neg, auto_cat, auto_reason = _extract_company_negative_info(
+                        translated_text, company_name, c_aliases, primary_match.context_snippet
+                    )
+
+                    comp_status = "skipped"
+                    comp_sentiment = "NEUTRAL"
+                    comp_sent_conf = 50.0
+                    comp_crisis = False
+                    comp_crisis_topic = "NONE"
+                    comp_crisis_severity = 0.0
+                    comp_summary = neg_info or company_context or ext_article.headline
+                    comp_reason = auto_reason
+
+                    # Targeted LFM analysis specifically for this company
+                    if _lfm_service.is_available():
+                        try:
+                            lfm_result = await asyncio.to_thread(
+                                _lfm_service.analyze,
+                                company_context or translated_text,
+                                entity_texts,
+                                company_name
+                            )
+                            if lfm_result and lfm_result.status == "success":
+                                comp_status = "success"
+                                lfm_status = "success"
+                                comp_sentiment = str(lfm_result.sentiment.get("sentiment", "NEUTRAL")).upper()
+                                comp_sent_conf = float(lfm_result.sentiment.get("confidence", 0.5) * 100)
+                                comp_crisis = bool(lfm_result.crisis.get("crisis", False))
+                                comp_crisis_topic = str(lfm_result.crisis.get("category", "GENERAL")).upper()
+                                comp_crisis_severity = float(lfm_result.crisis.get("severity", 0.0))
+                                if comp_sentiment == "NEGATIVE":
+                                    comp_summary = lfm_result.summary or neg_info or ext_article.headline
+                                    comp_reason = lfm_result.crisis.get("reason") or auto_reason
+                                else:
+                                    comp_summary = lfm_result.summary or company_context or ext_article.headline
+                        except Exception as e:
+                            logger.warning(f"LFM company analysis failed for {company_name}: {e}")
+
+                    # Fallback sentiment analysis focused specifically on this company
+                    if comp_status != "success":
+                        try:
+                            if auto_neg:
+                                comp_sentiment = "NEGATIVE"
+                                comp_sent_conf = 88.0
+                                comp_crisis = True
+                                comp_crisis_topic = auto_cat
+                                comp_crisis_severity = 0.75
+                                comp_summary = neg_info
+                                comp_status = "success"
+                            else:
+                                sent_res = await asyncio.to_thread(
+                                    _sentiment_analyzer.analyze,
+                                    company_context or ext_article.full_text,
+                                    company_context or translated_text,
+                                    detected_lang
+                                )
+                                comp_sentiment = str(sent_res.label).upper()
+                                comp_sent_conf = float(sent_res.confidence)
+                                comp_status = "success"
+                                if comp_sentiment == "NEGATIVE":
+                                    comp_crisis = True
+                                    comp_crisis_topic = auto_cat
+                                    comp_crisis_severity = 0.60
+                                    comp_summary = neg_info or company_context or ext_article.headline
+                                else:
+                                    comp_summary = company_context or ext_article.headline
+                        except Exception as e:
+                            logger.warning(f"Sentiment fallback failed for {company_name}: {e}")
+
+                    doc_sentiments.append(comp_sentiment)
+
+                    # Calculate crisis & risk scores specifically for this company
+                    sentiment_severity = 100 if comp_sentiment == "NEGATIVE" else (50 if comp_sentiment == "NEUTRAL" else 0)
+                    brand_relevance = 85
+                    crisis_severity = comp_crisis_severity if comp_crisis else 0.0
                     publication_reach = 50
                     avg_ai_conf = ((page.get("ocr_confidence") or 100) + (translation_confidence or 100)) / 2
 
@@ -499,10 +663,26 @@ async def process_document_task(document_id: str, job_id: str):
 
                     doc_risk_scores.append(final_crisis_score)
 
+                    # 1. Record AI Analysis specifically for this company
+                    excel.append_row("AIAnalysis", {
+                        "analysis_id": str(uuid.uuid4()),
+                        "article_id": article_id,
+                        "brand_name": company_name,
+                        "summary": comp_summary or ext_article.headline,
+                        "sentiment": comp_sentiment,
+                        "sentiment_confidence": comp_sent_conf,
+                        "crisis_category": comp_crisis_topic if comp_crisis else "NONE",
+                        "crisis_reason": comp_reason or ("Negative news identified" if comp_sentiment == "NEGATIVE" else "Standard coverage"),
+                        "ai_confidence": comp_sent_conf,
+                        "model_name": "lfm-sentiment-pipeline",
+                        "created_at": datetime.utcnow().isoformat()
+                    })
+
+                    # 2. Record CrisisScores specifically for this company
                     excel.append_row("CrisisScores", {
                         "score_id": str(uuid.uuid4()),
                         "article_id": article_id,
-                        "brand_name": brand_match.brand_name,
+                        "brand_name": company_name,
                         "sentiment_score": sentiment_severity,
                         "brand_relevance_score": brand_relevance,
                         "crisis_severity_score": crisis_severity,
@@ -513,41 +693,43 @@ async def process_document_task(document_id: str, job_id: str):
                         "created_at": datetime.utcnow().isoformat()
                     })
 
+                    # 3. Record BrandMentions specifically for this company
                     excel.append_row("BrandMentions", {
                         "mention_id": str(uuid.uuid4()),
                         "article_id": article_id,
-                        "brand_name": brand_match.brand_name,
-                        "matched_text": brand_match.matched_text,
-                        "match_type": brand_match.match_type,
-                        "match_confidence": brand_match.confidence,
-                        "context": brand_match.context_snippet,
-                        "verified_by_lfm": lfm_status == "success",
+                        "brand_name": company_name,
+                        "matched_text": primary_match.matched_text,
+                        "match_type": primary_match.match_type,
+                        "match_confidence": primary_match.confidence,
+                        "context": company_context or primary_match.context_snippet,
+                        "verified_by_lfm": comp_status == "success",
                         "created_at": datetime.utcnow().isoformat()
                     })
 
-                    if final_crisis_score >= 50 or lfm_crisis or (lfm_sentiment == "NEGATIVE" and final_crisis_score >= 25):
+                    # 4. Record Alerts specifically for this company if negative news / crisis
+                    if final_crisis_score >= 50 or comp_crisis or (comp_sentiment == "NEGATIVE" and final_crisis_score >= 25):
                         excel.append_row("Alerts", {
                             "alert_id": str(uuid.uuid4()),
                             "article_id": article_id,
                             "document_id": document_id,
                             "publication": doc.get("publication", "Regional Broadsheet"),
                             "page_number": page["page_number"],
-                            "brand_name": brand_match.brand_name,
+                            "brand_name": company_name,
                             "language": detected_lang,
                             "headline": ext_article.headline,
-                            "sentiment": lfm_sentiment,
-                            "crisis_category": lfm_crisis_topic if lfm_crisis else "NONE",
+                            "sentiment": comp_sentiment,
+                            "crisis_category": comp_crisis_topic if comp_crisis else "GENERAL",
                             "crisis_score": final_crisis_score,
                             "severity": severity_label,
-                            "summary": lfm_summary or ext_article.headline,
-                            "reason": f"AI identified this article with {severity_label} severity.",
+                            "summary": comp_summary or ext_article.headline,
+                            "reason": f"Negative news identified for {company_name}: {comp_reason or comp_summary}",
                             "evidence_page_path": page["image_path"],
                             "evidence_article_coordinates": f"{ext_article.bbox_x},{ext_article.bbox_y},{ext_article.bbox_width},{ext_article.bbox_height}",
                             "alert_status": "NEW",
                             "created_at": datetime.utcnow().isoformat()
                         })
                         await _log_audit(excel, document_id, article_id, "alert_generated", "alert_generation",
-                                         details={"brand": brand_match.brand_name, "risk_score": final_crisis_score})
+                                         details={"brand": company_name, "risk_score": final_crisis_score})
 
                 # Human review flag
                 review_item = _review_service.should_review(
@@ -606,6 +788,10 @@ async def process_document_task(document_id: str, job_id: str):
                 "processing_error": str(e),
                 "processing_completed_at": datetime.utcnow().isoformat()
             })
+            try:
+                await _log_audit(excel, document_id, None, "pipeline_failed", "pipeline", details={"error": str(e)})
+            except Exception:
+                pass
 
 
 async def _log_audit(excel: ExcelStorageService, doc_id: str, article_id: str,

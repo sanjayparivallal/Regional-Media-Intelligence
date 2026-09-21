@@ -6,6 +6,10 @@ Main entry point. Mounts all API routes and serves static files.
 
 import os
 import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # Suppress transformers/tqdm weight-loading progress bars globally and enforce 100% offline air-gapped mode
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -40,17 +44,31 @@ async def lifespan(app: FastAPI):
     # Initialize Excel Storage
     from storage.excel_storage_service import ExcelStorageService
     excel = ExcelStorageService()
+    excel.seed_defaults_if_empty()
 
     # Clean up any orphaned running jobs from prior restarts
     try:
-        # Simplistic cleanup for Excel
         excel.update_row("Documents", {"processing_status": "PROCESSING"}, {"processing_status": "FAILED", "processing_error": "Server restarted during processing. Ready to reprocess."})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to reset orphaned jobs: {e}")
+
+    # Start harvest scheduler
+    from harvesting.scheduler import start_scheduler, stop_scheduler
+    _scheduler = None
+    try:
+        _scheduler = start_scheduler()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Harvest scheduler failed to start: {e}")
 
     yield
 
     # Shutdown
+    if _scheduler:
+        try:
+            stop_scheduler()
+        except Exception:
+            pass
 
 
 app = FastAPI(
@@ -72,6 +90,7 @@ app.add_middleware(
 # Mount API routes
 from api.documents import router as documents_router
 from api.alerts import router as alerts_router
+from api.harvesting import router as harvesting_router
 from api.routes import (
     articles_router, reviews_router, brands_router,
     analytics_router, search_router, incidents_router,
@@ -80,6 +99,7 @@ from api.routes import (
 
 app.include_router(documents_router, prefix="/api")
 app.include_router(alerts_router, prefix="/api")
+app.include_router(harvesting_router, prefix="/api")
 app.include_router(articles_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
 app.include_router(brands_router, prefix="/api")
@@ -125,4 +145,5 @@ if __name__ == "__main__":
         host=settings.backend_host,
         port=settings.backend_port,
         reload=settings.debug,
+        reload_excludes=["storage/*", "*.xlsx", "*.log", "*.html", "tests/*", "scratch/*"],
     )

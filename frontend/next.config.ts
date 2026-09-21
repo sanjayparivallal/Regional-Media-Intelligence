@@ -1,7 +1,8 @@
+import type { NextConfig } from 'next';
+
 const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig: NextConfig = {
   output: 'standalone',
   experimental: {
     proxyClientMaxBodySize: '100mb',
@@ -21,3 +22,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+

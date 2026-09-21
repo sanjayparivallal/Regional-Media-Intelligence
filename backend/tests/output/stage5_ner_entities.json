@@ -1,0 +1,463 @@
+{
+  "stage": "Stage 5: Named Entity Recognition",
+  "total_unique_entities": 38,
+  "all_entities": [
+    {
+      "text": "Adani",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.9,
+      "source": "gazetteer"
+    },
+    {
+      "text": "Adani Enterprises",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "second",
+      "entity_type": "ORDINAL",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "quarterly",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "July 2026",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "11.60 billion",
+      "entity_type": "FINANCIAL",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "the quarter\nended June 30, 2026",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "one",
+      "entity_type": "CARDINAL",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "U.S.",
+      "entity_type": "LOCATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "MarketScreener",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "India",
+      "entity_type": "LOCATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Adani/Hindenburg",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "September 2026",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Reuters",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Hindenburg",
+      "entity_type": "LOCATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Adani Ports",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "CFO",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "1.37",
+      "entity_type": "CARDINAL",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "The Economic Times\nAdani Group",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "August-September 2026",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "2026",
+      "entity_type": "DATE",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Adani Group",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "as much as 10%",
+      "entity_type": "PERCENT",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "US",
+      "entity_type": "LOCATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "SEC",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Gautam Adani",
+      "entity_type": "PERSON",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "The Times of India\n",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "Sagar",
+      "entity_type": "PERSON",
+      "confidence": 0.8,
+      "source": "spacy"
+    },
+    {
+      "text": "SEBI",
+      "entity_type": "REGULATOR",
+      "confidence": 0.95,
+      "source": "gazetteer"
+    },
+    {
+      "text": "ED",
+      "entity_type": "REGULATOR",
+      "confidence": 0.95,
+      "source": "gazetteer"
+    },
+    {
+      "text": "ola",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.9,
+      "source": "gazetteer"
+    },
+    {
+      "text": "vi",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.9,
+      "source": "gazetteer"
+    },
+    {
+      "text": "In September",
+      "entity_type": "UNKNOWN",
+      "confidence": 0.5,
+      "source": "regex"
+    },
+    {
+      "text": "Reuters\nAdani Ports",
+      "entity_type": "UNKNOWN",
+      "confidence": 0.5,
+      "source": "regex"
+    },
+    {
+      "text": "Several Adani",
+      "entity_type": "UNKNOWN",
+      "confidence": 0.5,
+      "source": "regex"
+    },
+    {
+      "text": "The Times",
+      "entity_type": "UNKNOWN",
+      "confidence": 0.5,
+      "source": "regex"
+    },
+    {
+      "text": "India\nSagar",
+      "entity_type": "UNKNOWN",
+      "confidence": 0.5,
+      "source": "regex"
+    },
+    {
+      "text": "CEO",
+      "entity_type": "ORGANIZATION",
+      "confidence": 0.4,
+      "source": "regex"
+    }
+  ],
+  "by_article": [
+    {
+      "article_id": 1,
+      "entities": [
+        {
+          "text": "Adani",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.9,
+          "source": "gazetteer"
+        },
+        {
+          "text": "Adani Enterprises",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "second",
+          "entity_type": "ORDINAL",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "quarterly",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "July 2026",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "11.60 billion",
+          "entity_type": "FINANCIAL",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "the quarter ended June 30, 2026",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "one",
+          "entity_type": "CARDINAL",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "U.S.",
+          "entity_type": "LOCATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "MarketScreener",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "India",
+          "entity_type": "LOCATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Adani/Hindenburg",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "September 2026",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Reuters",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Hindenburg",
+          "entity_type": "LOCATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Reuters Adani Ports",
+          "entity_type": "PERSON",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "CFO",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "1.37 million",
+          "entity_type": "CARDINAL",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "The Economic Times Adani Group",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "August-September 2026",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Earlier in",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "2026",
+          "entity_type": "DATE",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Adani Group",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "as much as 10%",
+          "entity_type": "PERCENT",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "US",
+          "entity_type": "LOCATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "SEC",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "Gautam Adani",
+          "entity_type": "PERSON",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "The Times of India Sagar",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.8,
+          "source": "spacy"
+        },
+        {
+          "text": "SEBI",
+          "entity_type": "REGULATOR",
+          "confidence": 0.95,
+          "source": "gazetteer"
+        },
+        {
+          "text": "ED",
+          "entity_type": "REGULATOR",
+          "confidence": 0.95,
+          "source": "gazetteer"
+        },
+        {
+          "text": "ola",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.9,
+          "source": "gazetteer"
+        },
+        {
+          "text": "vi",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.9,
+          "source": "gazetteer"
+        },
+        {
+          "text": "In September",
+          "entity_type": "UNKNOWN",
+          "confidence": 0.5,
+          "source": "regex"
+        },
+        {
+          "text": "Several Adani",
+          "entity_type": "UNKNOWN",
+          "confidence": 0.5,
+          "source": "regex"
+        },
+        {
+          "text": "The Times",
+          "entity_type": "UNKNOWN",
+          "confidence": 0.5,
+          "source": "regex"
+        },
+        {
+          "text": "India Sagar",
+          "entity_type": "UNKNOWN",
+          "confidence": 0.5,
+          "source": "regex"
+        },
+        {
+          "text": "CEO",
+          "entity_type": "ORGANIZATION",
+          "confidence": 0.4,
+          "source": "regex"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "stage": "Stage 9: Alert Generation",
+  "total_alerts_generated": 1,
+  "alerts": [
+    {
+      "alert_id": "ALT-1-Adani",
+      "brand_name": "Adani",
+      "severity": "CRITICAL",
+      "headline": "Ifyou need recent negative Adani-related news for a sentiment-analysis test; these are useful exampl...",
+      "risk_score": 100,
+      "sentiment": "neutral",
+      "crisis_type": "regulatory_action",
+      "created_at": "2026-09-20 20:18:29"
+    }
+  ]
+}
