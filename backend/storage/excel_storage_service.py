@@ -501,7 +501,8 @@ class ExcelStorageService:
                 try:
                     with open(newspapers_config, "r", encoding="utf-8") as f:
                         news_data = json.load(f)
-                    for s in news_data.get("sources", []):
+                    sources_list = news_data.get("sources", []) if isinstance(news_data, dict) else (news_data if isinstance(news_data, list) else [])
+                    for s in sources_list:
                         self.append_row("HarvestSources", {
                             "id": s.get("id"),
                             "name": s.get("name"),
