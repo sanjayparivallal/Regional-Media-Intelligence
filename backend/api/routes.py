@@ -37,7 +37,7 @@ async def list_articles(
     if language: query["language"] = language
     
     articles = excel.find_rows("Articles", query)
-    articles.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    articles.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     
     paginated = articles[offset:offset+limit]
     responses = []
@@ -63,7 +63,7 @@ async def list_all_mentions(
 ):
     excel = ExcelStorageService()
     mentions = excel.find_rows("BrandMentions", {})
-    mentions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    mentions.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     paginated = mentions[offset:offset+limit]
     
     out = []
@@ -120,7 +120,7 @@ async def list_reviews(
     if review_type: query["review_type"] = review_type
     
     reviews = excel.find_rows("Reviews", query)
-    reviews.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    reviews.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     
     paginated = reviews[offset:offset+limit]
     return [{
