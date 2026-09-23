@@ -161,8 +161,25 @@ def _deserialize_cell(val: Any) -> Any:
     return val
 
 
-class ExcelStorageService:
-    """Thread-safe Excel persistence engine."""
+##############################################################################
+# MIGRATION NOTE
+# ExcelStorageService is now a transparent alias for DBStorageService.
+# All call-sites (api/, workers/, harvesting/) continue to work unchanged.
+# The class definition below is kept only as a fallback if the DB import fails.
+##############################################################################
+
+try:
+    from storage.db_storage_service import DBStorageService as ExcelStorageService  # noqa: F401
+    import logging as _logging
+    _logging.getLogger(__name__).info("[Storage] Using DBStorageService (PostgreSQL)")
+except Exception as _db_import_err:
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        f"[Storage] DBStorageService unavailable ({_db_import_err}), falling back to Excel"
+    )
+
+    class ExcelStorageService:
+        """Thread-safe Excel persistence engine (fallback)."""
 
     def __init__(self, excel_path: Optional[str] = None):
         if excel_path:
@@ -257,37 +274,48 @@ class ExcelStorageService:
     def _load_workbook_safe(self, read_only: bool = False) -> openpyxl.Workbook:
         """
         Load workbook, recovering from corruption automatically.
-
-        On BadZipFile or any load failure, backs up the corrupt file,
-        creates a fresh workbook, and returns that.
+        Retries transient read collisions before declaring corruption.
         """
+        for attempt in range(1, 16):
+            try:
+                return openpyxl.load_workbook(self.file_path, data_only=read_only)
+            except Exception as e:
+                if attempt < 15:
+                    time.sleep(0.2)
+                else:
+                    logger.error(f"Workbook load failed ({e}) after 15 attempts, recovering...")
+                    self._recover_corrupt_workbook(reason=str(e))
+                    return openpyxl.load_workbook(self.file_path, data_only=read_only)
+
+    def _save_workbook(self, wb: openpyxl.Workbook, max_retries: int = 15, retry_delay: float = 0.2) -> None:
+        """Save workbook atomically with retries to handle transient file locks."""
+        import uuid
+        tmp_path = self.file_path.with_suffix(f".tmp_{uuid.uuid4().hex[:8]}.xlsx")
         try:
-            return openpyxl.load_workbook(self.file_path, data_only=read_only)
-        except Exception as e:
-            logger.error(f"Workbook load failed ({e}), recovering...")
-            self._recover_corrupt_workbook(reason=str(e))
-            # Return the freshly created (empty) workbook
-            return openpyxl.load_workbook(self.file_path, data_only=read_only)
+            wb.save(tmp_path)
+        except Exception:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+            raise
 
-
-    def _save_workbook(self, wb: openpyxl.Workbook, max_retries: int = 5, retry_delay: float = 0.5) -> None:
-        """Save workbook with retries to handle transient file locks."""
         for attempt in range(1, max_retries + 1):
             try:
-                wb.save(self.file_path)
+                os.replace(str(tmp_path), str(self.file_path))
                 return
-            except PermissionError as pe:
+            except (PermissionError, OSError) as pe:
                 if attempt < max_retries:
                     time.sleep(retry_delay)
                 else:
-                    logger.error(
-                        f"Permission denied saving to '{self.file_path}'. "
-                        f"If Microsoft Excel is currently open with this file, please close it."
-                    )
-                    raise PermissionError(
-                        f"Cannot save to '{self.file_path}' because it is locked by another program (e.g. Microsoft Excel). "
-                        f"Please close Excel and try again."
-                    ) from pe
+                    if tmp_path.exists():
+                        try:
+                            tmp_path.unlink()
+                        except Exception:
+                            pass
+                    logger.error(f"Failed to replace '{self.file_path}' after {max_retries} attempts: {pe}")
+                    raise
 
     def _get_or_create_sheet(self, wb: openpyxl.Workbook, sheet_name: str) -> openpyxl.worksheet.worksheet.Worksheet:
         """Get worksheet or create if not present."""
@@ -316,16 +344,15 @@ class ExcelStorageService:
             if not self.file_path.exists():
                 return results
 
+            wb = None
             try:
-                wb = openpyxl.load_workbook(self.file_path, data_only=True)
+                wb = self._load_workbook_safe(read_only=True)
                 if sheet_name not in wb.sheetnames:
-                    wb.close()
                     return results
 
                 ws = wb[sheet_name]
                 headers = self._get_headers(ws)
                 if not headers:
-                    wb.close()
                     return results
 
                 for row in ws.iter_rows(min_row=2, values_only=True):
@@ -347,10 +374,14 @@ class ExcelStorageService:
 
                     if match:
                         results.append(row_dict)
-
-                wb.close()
             except Exception as e:
                 logger.error(f"Error reading {sheet_name}: {e}")
+            finally:
+                if wb is not None:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
         return results
 
@@ -362,68 +393,81 @@ class ExcelStorageService:
     def append_row(self, sheet_name: str, row_dict: Dict[str, Any]) -> None:
         """Append a new row to sheet, automatically expanding columns if needed."""
         with _GLOBAL_LOCK:
-            wb = self._load_workbook_safe()
-            ws = self._get_or_create_sheet(wb, sheet_name)
-            headers = self._get_headers(ws)
+            wb = None
+            try:
+                wb = self._load_workbook_safe()
+                ws = self._get_or_create_sheet(wb, sheet_name)
+                headers = self._get_headers(ws)
 
-            # Check if any keys in row_dict are missing from headers
-            new_cols = [k for k in row_dict.keys() if k not in headers]
-            if new_cols:
-                for col in new_cols:
-                    headers.append(col)
-                    ws.cell(row=1, column=len(headers), value=col)
+                # Check if any keys in row_dict are missing from headers
+                new_cols = [k for k in row_dict.keys() if k not in headers]
+                if new_cols:
+                    for col in new_cols:
+                        headers.append(col)
+                        ws.cell(row=1, column=len(headers), value=col)
 
-            # Build row values matching header positions
-            row_vals = [_serialize_val(row_dict.get(h)) for h in headers]
-            ws.append(row_vals)
+                # Build row values matching header positions
+                row_vals = [_serialize_val(row_dict.get(h)) for h in headers]
+                ws.append(row_vals)
 
-            self._save_workbook(wb)
-            wb.close()
+                self._save_workbook(wb)
+            finally:
+                if wb is not None:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
     def update_row(self, sheet_name: str, query: Dict[str, Any], update_dict: Dict[str, Any]) -> bool:
         """Update matching rows in sheet. Adds new columns if needed. Returns True if any matched."""
         with _GLOBAL_LOCK:
-            wb = self._load_workbook_safe()
-            if sheet_name not in wb.sheetnames:
-                wb.close()
-                return False
+            wb = None
+            try:
+                wb = self._load_workbook_safe()
+                if sheet_name not in wb.sheetnames:
+                    return False
 
-            ws = wb[sheet_name]
-            headers = self._get_headers(ws)
+                ws = wb[sheet_name]
+                headers = self._get_headers(ws)
 
-            # Add any new columns to headers
-            new_cols = [k for k in update_dict.keys() if k not in headers]
-            if new_cols:
-                for col in new_cols:
-                    headers.append(col)
-                    ws.cell(row=1, column=len(headers), value=col)
+                # Add any new columns to headers
+                new_cols = [k for k in update_dict.keys() if k not in headers]
+                if new_cols:
+                    for col in new_cols:
+                        headers.append(col)
+                        ws.cell(row=1, column=len(headers), value=col)
 
-            matched = False
-            for row_idx in range(2, ws.max_row + 1):
-                row_dict: Dict[str, Any] = {}
-                for col_idx, col_name in enumerate(headers):
-                    if not col_name:
-                        continue
-                    val = ws.cell(row=row_idx, column=col_idx + 1).value
-                    row_dict[col_name] = _deserialize_cell(val)
+                matched = False
+                for row_idx in range(2, ws.max_row + 1):
+                    row_dict: Dict[str, Any] = {}
+                    for col_idx, col_name in enumerate(headers):
+                        if not col_name:
+                            continue
+                        val = ws.cell(row=row_idx, column=col_idx + 1).value
+                        row_dict[col_name] = _deserialize_cell(val)
 
-                # Check query match
-                match = True
-                for q_key, q_val in query.items():
-                    if not _matches_filter(row_dict.get(q_key), q_val):
-                        match = False
-                        break
+                    # Check query match
+                    match = True
+                    for q_key, q_val in query.items():
+                        if not _matches_filter(row_dict.get(q_key), q_val):
+                            match = False
+                            break
 
-                if match:
-                    matched = True
-                    for u_key, u_val in update_dict.items():
-                        c_idx = headers.index(u_key) + 1
-                        ws.cell(row=row_idx, column=c_idx, value=_serialize_val(u_val))
+                    if match:
+                        matched = True
+                        for u_key, u_val in update_dict.items():
+                            c_idx = headers.index(u_key) + 1
+                            ws.cell(row=row_idx, column=c_idx, value=_serialize_val(u_val))
 
-            if matched:
-                self._save_workbook(wb)
-            wb.close()
-            return matched
+                if matched:
+                    self._save_workbook(wb)
+                return matched
+            finally:
+                if wb is not None:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
     def delete_row(self, sheet_name: str, query: Dict[str, Any]) -> bool:
         """Delete first matching row."""
@@ -432,40 +476,46 @@ class ExcelStorageService:
     def delete_rows(self, sheet_name: str, query: Dict[str, Any], limit: Optional[int] = None) -> int:
         """Delete matching rows in sheet. Returns count of deleted rows."""
         with _GLOBAL_LOCK:
-            wb = self._load_workbook_safe()
-            if sheet_name not in wb.sheetnames:
-                wb.close()
-                return 0
+            wb = None
+            try:
+                wb = self._load_workbook_safe()
+                if sheet_name not in wb.sheetnames:
+                    return 0
 
-            ws = wb[sheet_name]
-            headers = self._get_headers(ws)
-            deleted_count = 0
+                ws = wb[sheet_name]
+                headers = self._get_headers(ws)
+                deleted_count = 0
 
-            # Iterate backwards to safely delete rows by index
-            for row_idx in range(ws.max_row, 1, -1):
-                row_dict: Dict[str, Any] = {}
-                for col_idx, col_name in enumerate(headers):
-                    if not col_name:
-                        continue
-                    val = ws.cell(row=row_idx, column=col_idx + 1).value
-                    row_dict[col_name] = _deserialize_cell(val)
+                # Iterate backwards to safely delete rows by index
+                for row_idx in range(ws.max_row, 1, -1):
+                    row_dict: Dict[str, Any] = {}
+                    for col_idx, col_name in enumerate(headers):
+                        if not col_name:
+                            continue
+                        val = ws.cell(row=row_idx, column=col_idx + 1).value
+                        row_dict[col_name] = _deserialize_cell(val)
 
-                match = True
-                for q_key, q_val in query.items():
-                    if not _matches_filter(row_dict.get(q_key), q_val):
-                        match = False
-                        break
+                    match = True
+                    for q_key, q_val in query.items():
+                        if not _matches_filter(row_dict.get(q_key), q_val):
+                            match = False
+                            break
 
-                if match:
-                    ws.delete_rows(row_idx)
-                    deleted_count += 1
-                    if limit and deleted_count >= limit:
-                        break
+                    if match:
+                        ws.delete_rows(row_idx)
+                        deleted_count += 1
+                        if limit and deleted_count >= limit:
+                            break
 
-            if deleted_count > 0:
-                self._save_workbook(wb)
-            wb.close()
-            return deleted_count
+                if deleted_count > 0:
+                    self._save_workbook(wb)
+                return deleted_count
+            finally:
+                if wb is not None:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
     def seed_defaults_if_empty(self) -> None:
         """Seed default monitored brands and sources if sheets are empty."""

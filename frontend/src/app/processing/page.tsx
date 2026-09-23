@@ -114,12 +114,11 @@ export default function ProcessingPage() {
       setDocuments(uniqueDocs);
       setLoading(false);
 
-      // Concurrently fetch jobs for active documents without blocking UI
-      const activeStatuses = ["processing", "queued", "uploaded"];
-      const activeDocs = (docs || []).filter((d: any) => activeStatuses.includes(d.status?.toLowerCase()));
-      if (activeDocs.length > 0) {
+      // Concurrently fetch jobs for ALL documents (active + completed) so stages display correctly
+      const allFetchable = (docs || []);
+      if (allFetchable.length > 0) {
         Promise.allSettled(
-          activeDocs.map(async (doc: any) => {
+          allFetchable.map(async (doc: any) => {
             try {
               const docJobs = await api.getDocumentJobs(doc.id);
               if (docJobs && docJobs.length > 0) {
@@ -129,8 +128,10 @@ export default function ProcessingPage() {
           })
         );
       }
-    } catch (e) {
-      console.warn("Could not load documents from API:", e);
+    } catch (e: any) {
+      if (e?.name !== "AbortError" && !e?.message?.includes("timed out")) {
+        console.warn("Could not load documents from API:", e);
+      }
       // Preserve existing documents if already loaded; only fallback if completely empty
       setDocuments(prev => {
         if (prev && prev.length > 0) return prev;
@@ -146,14 +147,14 @@ export default function ProcessingPage() {
     load();
   }, [load]);
 
-  // Only poll when there are active documents in progress
+  // Poll when there are active documents in progress
   const hasActive = documents.some(d =>
     ["processing", "queued"].includes(d.status?.toLowerCase())
   );
 
   useEffect(() => {
     if (!hasActive) return;
-    const interval = setInterval(load, 8000);
+    const interval = setInterval(load, 4000); // 4s for snappier progress updates
     return () => clearInterval(interval);
   }, [hasActive, load]);
 
@@ -236,7 +237,7 @@ export default function ProcessingPage() {
             {hasActive ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                <span className="text-blue-700 font-semibold">Live Polling (8s)</span>
+                <span className="text-blue-700 font-semibold">Live Polling (4s)</span>
               </>
             ) : (
               <>
@@ -384,7 +385,8 @@ function DocumentCard({
     Object.assign(stageStatuses, job.stages);
   }
 
-  const progress = job?.progress_percent ?? (status === "completed" ? 100 : 0);
+  // Progress: prefer job value (freshest), then doc value, then 100 if completed, else 0
+  const progress = job?.progress_percent ?? doc.progress_percent ?? (status === "completed" ? 100 : 0);
   const completedCount = Object.values(stageStatuses).filter(s => s === "completed").length;
   const runningStage = pipelineStages.find(s => stageStatuses[s.key] === "running");
 

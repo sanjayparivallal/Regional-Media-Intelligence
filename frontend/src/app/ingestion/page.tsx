@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import {
@@ -148,6 +148,8 @@ export default function IngestionPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const inFlightRef = useRef(false);
+
   // Poll active pipeline documents
   useEffect(() => {
     const hasActive = activePipelineDocs.some(
@@ -156,6 +158,8 @@ export default function IngestionPage() {
     if (!hasActive) return;
 
     const interval = setInterval(async () => {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
       try {
         const updatedDocs = await api.getDocuments();
         if (!updatedDocs) return;
@@ -185,10 +189,14 @@ export default function IngestionPage() {
             };
           })
         );
-      } catch (err) {
-        console.warn("Polling document status warning:", err);
+      } catch (err: any) {
+        if (err?.name !== 'AbortError' && !err?.message?.includes('timed out')) {
+          console.warn("Polling document status warning:", err);
+        }
+      } finally {
+        inFlightRef.current = false;
       }
-    }, 1500);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [activePipelineDocs]);

@@ -72,9 +72,13 @@ class LanguageRegistry:
         return [l for l in self._languages.values() if l.enabled]
 
     def get_easyocr_languages(self) -> List[str]:
-        """Get language codes supported by EasyOCR."""
+        """Get language codes supported by Indic-OCR / EasyOCR."""
         return [l.easyocr_code for l in self._languages.values()
-                if l.enabled and l.easyocr_code and l.ocr_provider == "easyocr"]
+                if l.enabled and l.easyocr_code and l.ocr_provider in ("indic-ocr", "easyocr")]
+
+    def get_indicocr_languages(self) -> List[str]:
+        """Get language codes supported by Indic-OCR."""
+        return self.get_easyocr_languages()
 
     def get_paddleocr_languages(self) -> List[str]:
         """Get language codes that need PaddleOCR fallback."""
@@ -89,7 +93,7 @@ class LanguageRegistry:
     def get_ocr_provider(self, lang_code: str) -> str:
         """Get the OCR provider name for a language."""
         lang = self._languages.get(lang_code)
-        return lang.ocr_provider if lang else "easyocr"
+        return lang.ocr_provider if lang else "indic-ocr"
 
     def get_primary_languages(self) -> List[str]:
         """Get the primary focus languages."""

@@ -26,7 +26,16 @@ LANG_MAP = {
 
 # Local model storage path
 from pathlib import Path as _Path
-_MODEL_DIR = str(_Path(__file__).resolve().parent.parent.parent.parent / "models" / "indic-ocr")
+try:
+    from config import get_settings as _get_settings
+    _s = _get_settings()
+    _mp = _Path(_s.ocr_model_path)
+    if not _mp.is_absolute():
+        _MODEL_DIR = str((_Path(__file__).resolve().parent.parent.parent.parent / _mp).resolve())
+    else:
+        _MODEL_DIR = str(_mp.resolve())
+except Exception:
+    _MODEL_DIR = str(_Path(__file__).resolve().parent.parent.parent.parent / "models" / "indic-ocr")
 
 
 class EasyOCRProvider(OCRProvider):
@@ -37,6 +46,12 @@ class EasyOCRProvider(OCRProvider):
 
     @property
     def name(self) -> str:
+        try:
+            from config import get_settings
+            if (get_settings().ocr_engine or "").lower() == "indic-ocr":
+                return "indic-ocr"
+        except Exception:
+            pass
         return "easyocr"
 
     @property

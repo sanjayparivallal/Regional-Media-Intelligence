@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # --- Translation ---
     translation_model: str = "ai4bharat/indictrans2-indic-en-1B"
     translation_model_path: str = "./models/indictrans2"
+    hf_token: str = ""
 
     # --- LFM 2.5 (Ollama) ---
     ollama_url: str = "http://localhost:11434/api/generate"
@@ -60,7 +61,13 @@ class Settings(BaseSettings):
 
     # --- Processing ---
     max_upload_size_mb: int = 100
-    processing_workers: int = 2
+    processing_workers: int = 1         # Parallel document slots (1 = safest for single GPU)
+    ocr_page_concurrency: int = 1       # Pages OCR'd in parallel per document (1 = sequential, safe for GPU)
+    ocr_batch_size_gpu: int = 16        # EasyOCR batch size on GPU — 16 is safe for RTX 2050 (4 GB VRAM)
+    ocr_batch_size_cpu: int = 16        # EasyOCR batch size on CPU
+    ocr_max_image_dim: int = 1800       # Max image dimension before downscale (at 150 DPI broadsheet pages are ~1000px wide, well within limit)
+    warmup_models: bool = True          # Pre-warm OCR + translation on startup
+    translation_num_beams: int = 1      # Beam search width (1=greedy, fastest; 4=best quality)
 
     # --- Harvesting ---
     harvest_schedule: str = "06:30"           # HH:MM in harvest_timezone

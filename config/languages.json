@@ -6,7 +6,7 @@
       "enabled": true,
       "easyocr_code": "en",
       "nllb_code": "eng_Latn",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": true,
       "priority": 0
     },
@@ -16,7 +16,7 @@
       "enabled": true,
       "easyocr_code": "hi",
       "nllb_code": "hin_Deva",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 1
     },
@@ -26,7 +26,7 @@
       "enabled": true,
       "easyocr_code": "bn",
       "nllb_code": "ben_Beng",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 2
     },
@@ -36,7 +36,7 @@
       "enabled": true,
       "easyocr_code": "mr",
       "nllb_code": "mar_Deva",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 3
     },
@@ -46,7 +46,7 @@
       "enabled": true,
       "easyocr_code": "te",
       "nllb_code": "tel_Telu",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 4
     },
@@ -56,7 +56,7 @@
       "enabled": true,
       "easyocr_code": "ta",
       "nllb_code": "tam_Taml",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 5
     },
@@ -67,7 +67,7 @@
       "easyocr_code": null,
       "nllb_code": "guj_Gujr",
       "ocr_provider": "paddleocr",
-      "ocr_note": "EasyOCR does not support Gujarati; PaddleOCR used as fallback",
+      "ocr_note": "Indic-OCR does not support Gujarati; PaddleOCR used as fallback",
       "is_target_language": false,
       "priority": 6
     },
@@ -77,7 +77,7 @@
       "enabled": true,
       "easyocr_code": "ur",
       "nllb_code": "urd_Arab",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 7
     },
@@ -87,7 +87,7 @@
       "enabled": true,
       "easyocr_code": "kn",
       "nllb_code": "kan_Knda",
-      "ocr_provider": "easyocr",
+      "ocr_provider": "indic-ocr",
       "is_target_language": false,
       "priority": 8
     },
@@ -98,7 +98,7 @@
       "easyocr_code": null,
       "nllb_code": "mal_Mlym",
       "ocr_provider": "paddleocr",
-      "ocr_note": "EasyOCR does not support Malayalam; PaddleOCR used as fallback",
+      "ocr_note": "Indic-OCR does not support Malayalam; PaddleOCR used as fallback",
       "is_target_language": false,
       "priority": 9
     }
@@ -106,6 +106,7 @@
   "default_target_language": "en",
   "primary_languages": ["ta", "te", "mr", "bn", "hi"],
   "ocr_settings": {
+    "indic_ocr_model_dir": "models/indic-ocr",
     "easyocr_model_dir": "models/indic-ocr",
     "download_enabled": true,
     "gpu_enabled": true,

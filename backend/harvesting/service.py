@@ -443,9 +443,10 @@ class HarvestingService:
         excel.append_row("Documents", doc_dict)
 
         # Trigger RMIA pipeline (IndicOCR → IndicTrans2 → LFM 2.5)
-        from workers.processor import process_document_task
+        from workers.processor import process_document_task, register_task
         pipeline_job_id = str(_uuid.uuid4())
-        asyncio.create_task(process_document_task(document_id, pipeline_job_id))
+        task = asyncio.create_task(process_document_task(document_id, pipeline_job_id))
+        register_task(document_id, task)
 
         logger.info(
             f"Submitted to pipeline: document_id={document_id} "

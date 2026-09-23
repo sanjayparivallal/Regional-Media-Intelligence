@@ -26,12 +26,13 @@ class RenderedPage:
 def render_pdf_pages(
     file_path: str,
     output_dir: str,
-    dpi: int = 300,
+    dpi: int = 180,
     thumbnail_size: int = 400,
+    generate_thumbnails: bool = True,
 ) -> List[RenderedPage]:
     """
     Render PDF pages as PNG images at specified DPI.
-    Also generates thumbnails for the UI.
+    Also generates thumbnails for the UI (skipped when generate_thumbnails=False).
     """
     path = Path(file_path)
     out = Path(output_dir)
@@ -64,10 +65,11 @@ def render_pdf_pages(
             image_path = out / image_filename
             pix.save(str(image_path))
 
-            # Generate thumbnail
+            # Generate thumbnail only when requested (skip during pipeline OCR runs)
             thumb_filename = f"page_{page_num:03d}_thumb.png"
             thumb_path = out / thumb_filename
-            _create_thumbnail(str(image_path), str(thumb_path), thumbnail_size)
+            if generate_thumbnails:
+                _create_thumbnail(str(image_path), str(thumb_path), thumbnail_size)
 
             rendered.append(RenderedPage(
                 page_number=page_num,

@@ -77,7 +77,7 @@ def classify_pdf(file_path: str) -> PDFClassification:
             char_count = len(text.strip())
             images = page.get_images()
 
-            has_text = char_count > 50  # More than 50 chars = meaningful text layer
+            has_text = char_count > 200  # >200 chars = genuine text layer; watermarks/metadata are typically <60 chars
             has_images = len(images) > 0
 
             pages.append(PageInfo(

@@ -49,6 +49,26 @@ def _format_doc_response(d: dict) -> dict:
     }
 
 
+def infer_document_language(filename: str = "", publication: str = "") -> Optional[str]:
+    """Infer document language from filename or publication title."""
+    combined = f"{filename} {publication}".lower()
+    mapping = {
+        "kannada": "kn", "prabha": "kn", "prajavani": "kn", "vijayavani": "kn",
+        "eenadu": "te", "sakshi": "te", "andhra": "te", "telugu": "te",
+        "thanthi": "ta", "dinamani": "ta", "dinamalar": "ta", "tamil": "ta",
+        "jagran": "hi", "jansatta": "hi", "bhaskar": "hi", "amar_ujala": "hi", "navbharat": "hi", "hindi": "hi",
+        "manorama": "ml", "madhyamam": "ml", "mathrubhumi": "ml", "malayalam": "ml",
+        "anandabazar": "bn", "bengali": "bn", "bartaman": "bn",
+        "loksatta": "mr", "marathi": "mr", "sakala": "mr",
+        "sandesh": "gu", "gujarat": "gu",
+        "telegraph": "en", "times_of_india": "en", "the_hindu": "en", "hindu": "en", "deccan": "en", "express": "en"
+    }
+    for key, lang in mapping.items():
+        if key in combined:
+            return lang
+    return None
+
+
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
@@ -56,6 +76,7 @@ async def upload_document(
     publication_date: Optional[str] = Form(None),
     edition: Optional[str] = Form(None),
     source_region: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
 ):
     """Upload a newspaper PDF or image for processing."""
     # Validate file extension
@@ -93,7 +114,20 @@ async def upload_document(
     excel = ExcelStorageService()
     existing_doc = excel.find_row("Documents", {"file_hash": file_hash})
     if existing_doc:
+        if existing_doc.get("processing_status") in ("CANCELLED", "FAILED"):
+            excel.update_row("Documents", {"document_id": existing_doc["document_id"]}, {
+                "processing_status": "UPLOADED",
+                "current_stage": "queued",
+                "progress_percent": 0.0,
+                "processing_error": None,
+            })
+            existing_doc["processing_status"] = "UPLOADED"
+            existing_doc["current_stage"] = "queued"
+            existing_doc["progress_percent"] = 0.0
+            existing_doc["processing_error"] = None
         return _format_doc_response(existing_doc)
+
+    resolved_lang = language or infer_document_language(file.filename or "", publication_id or "")
 
     # Create document record
     doc_dict = {
@@ -104,7 +138,7 @@ async def upload_document(
         "publication": publication_id,
         "edition": edition,
         "publication_date": pub_date.isoformat() if pub_date else None,
-        "language": None,
+        "language": resolved_lang,
         "total_pages": 0,
         "processing_status": "UPLOADED",
         "current_stage": "queued",
@@ -180,15 +214,19 @@ async def start_processing(document_id: str):
         raise HTTPException(404, "Document not found")
 
     if doc.get("processing_status") == "PROCESSING":
-        raise HTTPException(409, "Document is already being processed")
+        from workers.processor import _active_tasks
+        active = _active_tasks.get(document_id)
+        if active and not active.done():
+            raise HTTPException(409, "Document is already being processed")
 
     excel.update_row("Documents", {"document_id": document_id}, {"processing_status": "QUEUED", "current_stage": "queued", "progress_percent": 0.0})
 
     # Trigger background processing (non-blocking)
-    from workers.processor import process_document_task
+    from workers.processor import process_document_task, register_task
     import asyncio
     job_id = str(uuid.uuid4())
-    asyncio.create_task(process_document_task(document_id, job_id))
+    task = asyncio.create_task(process_document_task(document_id, job_id))
+    register_task(document_id, task)
 
     return {
         "id": job_id,
@@ -207,24 +245,57 @@ async def get_document_jobs(document_id: str):
     doc = excel.find_row("Documents", {"document_id": document_id})
     if not doc:
         raise HTTPException(404, "Document not found")
-    
+
     status = (doc.get("processing_status") or "UPLOADED").lower()
-    current_stage = doc.get("current_stage") or "queued"
+    current_stage = (doc.get("current_stage") or "queued").lower()
     progress = float(doc.get("progress_percent") or 0.0)
-    
+    is_done = status == "completed"
+    is_failed = status == "failed"
+
+    def _stage(completed_above: float, running_keyword: str) -> str:
+        """Return stage status string based on progress band and stage keyword."""
+        if is_done:
+            return "completed"
+        if is_failed:
+            return "failed"
+        if progress >= completed_above:
+            return "completed"
+        if running_keyword and running_keyword in current_stage:
+            return "running"
+        return "pending"
+
+    # Map the 3-phase progress bands to the 13 frontend stage keys.
+    # Phase 1 OCR:        0%  → 30%
+    # Phase 2 Translate:  30% → 65%
+    # Phase 3 Sentiment:  65% → 95%
+    # Finalise:           95% → 100%
+    stages = {
+        "upload":             "completed" if progress > 0 or is_done else "pending",
+        "pdf_classification": "completed" if progress >= 2 or is_done else (
+                              "running"   if "pdf_class" in current_stage or "classif" in current_stage else "pending"),
+        "page_rendering":     "completed" if progress >= 2 or is_done else (
+                              "running"   if "render" in current_stage or "phase 1" in current_stage else "pending"),
+        "ocr":                _stage(30,  "ocr"),
+        "layout_analysis":    _stage(35,  "layout"),
+        "article_extraction": _stage(40,  "article"),
+        "language_detection": _stage(45,  "language"),
+        "translation":        _stage(65,  "translat"),
+        "entity_detection":   _stage(72,  "entity"),
+        "sentiment_analysis": _stage(82,  "sentiment"),
+        "crisis_analysis":    _stage(88,  "crisis"),
+        "alert_generation":   _stage(92,  "alert"),
+        "evidence_indexed":   "completed" if is_done else (
+                              "running"   if progress >= 95 else "pending"),
+    }
+
     return [{
         "id": f"job-{document_id[:8]}",
         "document_id": document_id,
         "status": status,
-        "current_stage": current_stage,
+        "current_stage": doc.get("current_stage") or "queued",
         "progress_percent": progress,
         "created_at": doc.get("created_at") or datetime.utcnow().isoformat(),
-        "stages": {
-            "extracting_text": {"status": "completed" if progress >= 30 else ("running" if "extracting" in current_stage or "ocr" in current_stage.lower() else "pending")},
-            "segmenting": {"status": "completed" if progress >= 50 else ("running" if "segmenting" in current_stage else "pending")},
-            "translating": {"status": "completed" if progress >= 70 else ("running" if "translating" in current_stage or "translation" in current_stage.lower() else "pending")},
-            "analyzing": {"status": "completed" if progress >= 90 else ("running" if "analyzing" in current_stage or "sentiment" in current_stage.lower() else "pending")}
-        }
+        "stages": stages,
     }]
 
 
@@ -236,6 +307,9 @@ async def cancel_document(document_id: str):
     if not doc:
         raise HTTPException(404, "Document not found")
     
+    from workers.processor import cancel_task
+    cancel_task(document_id)
+
     excel.update_row("Documents", {"document_id": document_id}, {
         "processing_status": "CANCELLED",
         "current_stage": "cancelled"

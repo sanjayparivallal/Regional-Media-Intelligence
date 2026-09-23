@@ -72,7 +72,8 @@ class PDFService:
         self,
         file_path: str,
         output_dir: str,
-        dpi: int = 300,
+        dpi: int = 180,
+        generate_thumbnails: bool = True,
     ) -> PDFProcessingResult:
         """
         Process a PDF file: classify, render pages, extract text layers.
@@ -126,7 +127,8 @@ class PDFService:
             out_dir.mkdir(parents=True, exist_ok=True)
 
             from pipeline.ingestion.page_renderer import render_pdf_pages
-            rendered_pages = render_pdf_pages(file_path, str(out_dir))
+            rendered_pages = render_pdf_pages(file_path, str(out_dir), dpi=dpi,
+                                             generate_thumbnails=generate_thumbnails)
 
             # Step 3: Extract text from text-layer pages
             pages = []

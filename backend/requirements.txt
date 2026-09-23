@@ -24,8 +24,9 @@ pdf2image==1.17.0
 numpy==2.2.6
 
 # === OCR Engines ===
+# Note: paddlepaddle-gpu must be installed manually:
+#   pip install paddlepaddle-gpu==3.0.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
 paddleocr==2.10.0
-paddlepaddle==3.0.0
 pytesseract==0.3.13
 easyocr==1.7.2
 
@@ -37,7 +38,10 @@ scikit-learn==1.6.1
 
 # === Transformers (local models) ===
 transformers==4.52.3
+# torch with CUDA 12.8 — install via:
+#   pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
 torch==2.7.0
+torchvision==0.22.0
 sentencepiece>=0.2.0
 protobuf==5.29.4
 

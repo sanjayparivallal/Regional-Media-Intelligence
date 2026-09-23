@@ -54,7 +54,11 @@ def _get_transformer_pipeline():
             / "model_assets" / "sentiment"
         )
         sentiment_model_name = getattr(settings, "sentiment_model", "cardiffnlp/twitter-xlm-roberta-base-sentiment-multilingual")
-        model_target = str(local_path) if local_path.exists() else sentiment_model_name
+        model_target = (
+            str(local_path)
+            if (local_path.exists() and (local_path / "config.json").exists())
+            else sentiment_model_name
+        )
         
         import torch
         device_id = 0 if torch.cuda.is_available() else -1

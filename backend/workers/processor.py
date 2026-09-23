@@ -159,7 +159,29 @@ def _extract_company_negative_info(
     return company_context, neg_info, is_negative, detected_category, detected_reason
 settings = get_settings()
 
-_processing_semaphore = asyncio.Semaphore(1)
+_processing_semaphore = asyncio.Semaphore(getattr(settings, "processing_workers", 1) or 1)
+_active_tasks: Dict[str, asyncio.Task] = {}
+
+
+def register_task(document_id: str, task: asyncio.Task) -> None:
+    """Register an active processing task for cancellation tracking."""
+    _active_tasks[document_id] = task
+
+
+def unregister_task(document_id: str) -> None:
+    """Unregister completed or cancelled task."""
+    _active_tasks.pop(document_id, None)
+
+
+def cancel_task(document_id: str) -> bool:
+    """Cancel active processing task if running."""
+    task = _active_tasks.pop(document_id, None)
+    if task and not task.done():
+        task.cancel()
+        logger.info(f"Background task for document {document_id} was successfully cancelled")
+        return True
+    return False
+
 
 # Service singletons
 _pdf_service = PDFService()
@@ -174,12 +196,52 @@ _confidence_service = ConfidenceService()
 _review_service = ReviewService()
 
 
+def warmup_models() -> None:
+    """
+    Pre-warm OCR and translation models onto GPU at server startup.
+    This avoids first-request cold-start latency (which can add 30-90 s).
+    Only runs if settings.warmup_models is True.
+    """
+    if not getattr(settings, "warmup_models", True):
+        return
+
+    import numpy as np
+    try:
+        logger.info("[Warmup] Pre-loading OCR model onto GPU…")
+        dummy_img = np.zeros((64, 256, 3), dtype=np.uint8)
+        # Touch the reader so it allocates GPU memory now, not on first paper
+        reader = _ocr_service._get_easyocr_reader("en")
+        if reader is not None:
+            reader.readtext(dummy_img, batch_size=1)
+        logger.info("[Warmup] OCR model ready")
+    except Exception as e:
+        logger.warning(f"[Warmup] OCR warmup skipped: {e}")
+
+    try:
+        logger.info("[Warmup] Pre-loading translation model onto GPU…")
+        _translation_service._load_model()
+        logger.info("[Warmup] Translation model ready")
+    except Exception as e:
+        logger.warning(f"[Warmup] Translation warmup skipped: {e}")
+
+
 async def process_document_task(document_id: str, job_id: str):
     """Main background task — runs 3-phase batch pipeline on a document."""
     async with _processing_semaphore:
         logger.info(f"Starting 3-phase processing for document {document_id}")
         start_time = time.time()
         excel = ExcelStorageService()
+
+        def _is_cancelled() -> bool:
+            try:
+                row = excel.find_row("Documents", {"document_id": document_id})
+                return bool(row and row.get("processing_status") == "CANCELLED")
+            except Exception:
+                return False
+
+        if _is_cancelled():
+            logger.info(f"Document {document_id} was cancelled before start, exiting.")
+            return
 
         try:
             doc = excel.find_row("Documents", {"document_id": document_id})
@@ -200,7 +262,7 @@ async def process_document_task(document_id: str, job_id: str):
                 excel.delete_rows(sheet, {"document_id": document_id})
 
             # =====================================================================
-            # PRE-PHASE — PDF Rendering
+            # PRE-PHASE — PDF Rendering (180 DPI for optimal speed and memory)
             # =====================================================================
             page_dir = Path(settings.page_image_path) / document_id
             upload_dir = Path(settings.upload_path)
@@ -215,7 +277,8 @@ async def process_document_task(document_id: str, job_id: str):
                 _pdf_service.process_pdf,
                 file_path,
                 str(page_dir),
-                300
+                150,  # 150 DPI: ~1000px wide A3 page — reliable for Indic script OCR (100 DPI gave 19% confidence)
+                generate_thumbnails=False,  # Skip thumbnail I/O during pipeline; thumbnails only needed for UI viewer
             )
 
             if pdf_result.status == "error" or not pdf_result.pages:
@@ -229,6 +292,10 @@ async def process_document_task(document_id: str, job_id: str):
             await _log_audit(excel, document_id, None, "pdf_classified", "pdf_classification",
                              details={"type": pdf_result.document_type, "pages": total_pages})
 
+            if _is_cancelled():
+                logger.info(f"Document {document_id} cancelled during rendering, exiting.")
+                return
+
             # =====================================================================
             # PHASE 1 — OCR ALL PAGES (IndicOCR)
             # Progress band: 0% → 30%
@@ -239,80 +306,140 @@ async def process_document_task(document_id: str, job_id: str):
                 "progress_percent": 2.0
             })
 
-            pages_to_process = []  # list of (page_dict, render_page, ocr_bounding_boxes)
+            # Resolve language hint once for the entire document
+            doc_lang_hint = doc.get("language") or doc.get("harvest_language_code")
+            if not doc_lang_hint:
+                from api.documents import infer_document_language
+                doc_lang_hint = infer_document_language(doc.get("file_name", ""), doc.get("publication", ""))
+            if doc_lang_hint and doc.get("language") != doc_lang_hint:
+                excel.update_row("Documents", {"document_id": document_id}, {"language": doc_lang_hint})
+            logger.info(f"[Phase 1] Document language hint resolved as: {doc_lang_hint}")
 
-            for page_idx, rp in enumerate(pdf_result.pages):
-                page_id = str(uuid.uuid4())
-                page_dict = {
-                    "page_id": page_id,
-                    "document_id": document_id,
-                    "page_number": rp.page_number,
-                    "image_path": rp.image_path,
-                    "is_scanned": not rp.has_text_layer,
-                    "has_extractable_text": rp.has_text_layer,
-                    "page_width": rp.width,
-                    "page_height": rp.height,
-                    "created_at": datetime.utcnow().isoformat()
-                }
+            page_sem = asyncio.Semaphore(getattr(settings, "ocr_page_concurrency", 1) or 1)
 
-                # Update progress within Phase 1
-                p1_progress = 2.0 + (page_idx / total_pages) * 28.0
-                excel.update_row("Documents", {"document_id": document_id}, {
-                    "current_stage": f"Phase 1: OCR Scan — page {rp.page_number}/{total_pages} (IndicOCR)",
-                    "progress_percent": round(p1_progress, 1)
-                })
+            async def _process_single_page(page_idx: int, rp):
+                if _is_cancelled():
+                    return None
+                async with page_sem:
+                    if _is_cancelled():
+                        return None
+                    page_id = str(uuid.uuid4())
+                    page_dict = {
+                        "page_id": page_id,
+                        "document_id": document_id,
+                        "page_number": rp.page_number,
+                        "image_path": rp.image_path,
+                        "is_scanned": not rp.has_text_layer,
+                        "has_extractable_text": rp.has_text_layer,
+                        "page_width": rp.width,
+                        "page_height": rp.height,
+                        "created_at": datetime.utcnow().isoformat()
+                    }
 
-                # Native text layer (digital PDF page)
-                if rp.has_text_layer and rp.extracted_text and len(rp.extracted_text.strip()) > 20:
-                    page_dict["ocr_text"] = rp.extracted_text
-                    page_dict["ocr_confidence"] = 100.0
-                    page_dict["ocr_status"] = "success"
-                    page_dict["language"] = "en"
-                    ocr_boxes = [{
-                        "points": [[0, 0], [rp.width, 0], [rp.width, rp.height], [0, rp.height]],
-                        "text": rp.extracted_text,
-                        "confidence": 100.0
-                    }]
-                else:
-                    # Scanned page — run IndicOCR
-                    try:
-                        prep_path = await asyncio.to_thread(
-                            _preprocessing_service.preprocess, rp.image_path
-                        )
-                    except Exception as e:
-                        logger.warning(f"Page {rp.page_number} preprocessing failed, using raw: {e}")
-                        prep_path = rp.image_path
-
-                    doc_lang_hint = doc.get("language")
-                    ocr_result = await asyncio.to_thread(
-                        _ocr_service.process_page, prep_path, doc_lang_hint
-                    )
-
-                    if ocr_result.status == "success" and ocr_result.text:
-                        page_dict["ocr_text"] = ocr_result.text
-                        page_dict["ocr_confidence"] = ocr_result.confidence or 75.0
+                    # Native text layer (digital PDF page)
+                    if rp.has_text_layer and rp.extracted_text and len(rp.extracted_text.strip()) > 20:
+                        page_dict["ocr_text"] = rp.extracted_text
+                        page_dict["ocr_confidence"] = 100.0
                         page_dict["ocr_status"] = "success"
-                        page_dict["language"] = ocr_result.language_hint or "en"
-                        ocr_boxes = ocr_result.bounding_boxes or []
+                        page_dict["language"] = "en"
+                        ocr_boxes = [{
+                            "points": [[0, 0], [rp.width, 0], [rp.width, rp.height], [0, rp.height]],
+                            "text": rp.extracted_text,
+                            "confidence": 100.0
+                        }]
                     else:
-                        logger.warning(f"OCR failed/empty on page {rp.page_number} — continuing")
-                        page_dict["ocr_text"] = ocr_result.text or ""
-                        page_dict["ocr_confidence"] = ocr_result.confidence or 0.0
-                        page_dict["ocr_status"] = ocr_result.status or "failed"
-                        page_dict["language"] = ocr_result.language_hint or "unknown"
-                        ocr_boxes = []
+                        prep_path = rp.image_path
+                        try:
+                            prep_path = await asyncio.to_thread(
+                                _preprocessing_service.preprocess, rp.image_path
+                            )
+                        except Exception as e:
+                            logger.warning(f"Page {rp.page_number} preprocessing failed, using raw: {e}")
 
-                excel.append_row("Pages", page_dict)
-                await _log_audit(excel, document_id, None, "ocr_completed", "ocr",
-                                 details={"page": rp.page_number, "confidence": page_dict["ocr_confidence"]})
+                        # --- OOM-safe OCR with automatic CPU fallback ---
+                        async def _run_ocr_safe(path, lang_hint):
+                            """Run OCR; on CUDA OOM flush VRAM and retry on CPU."""
+                            result = await asyncio.to_thread(
+                                _ocr_service.process_page, path, lang_hint
+                            )
+                            if result.status == "error" and (
+                                "out of memory" in (result.error or "").lower() or
+                                "cudaerror" in (result.error or "").lower()
+                            ):
+                                # CUDA OOM — flush and retry on CPU
+                                logger.warning(
+                                    f"Page {rp.page_number}: CUDA OOM detected, "
+                                    f"flushing VRAM and retrying on CPU..."
+                                )
+                                try:
+                                    import torch
+                                    torch.cuda.empty_cache()
+                                except Exception:
+                                    pass
+                                # Temporarily force CPU for this page
+                                orig_gpu = _ocr_service._gpu_available
+                                _ocr_service._gpu_available = False
+                                try:
+                                    result = await asyncio.to_thread(
+                                        _ocr_service.process_page, path, lang_hint
+                                    )
+                                finally:
+                                    _ocr_service._gpu_available = orig_gpu
+                            return result
 
-                pages_to_process.append((page_dict, rp, ocr_boxes))
+                        ocr_result = await _run_ocr_safe(prep_path, doc_lang_hint)
+                        # NOTE: torch.cuda.empty_cache() intentionally removed from per-page loop.
+                        # It does NOT free VRAM — it releases PyTorch's cache of freed tensors,
+                        # forcing CUDA to reallocate on next use, adding ~50-200ms overhead per page.
+                        # VRAM accumulation is prevented by the model singleton pattern.
 
-            logger.info(f"[Phase 1] Complete — {total_pages} pages OCR'd")
+                        if ocr_result.status == "success" and ocr_result.text:
+                            page_dict["ocr_text"] = ocr_result.text
+                            page_dict["ocr_confidence"] = ocr_result.confidence or 75.0
+                            page_dict["ocr_status"] = "success"
+                            page_dict["language"] = ocr_result.language_hint or "en"
+                            ocr_boxes = ocr_result.bounding_boxes or []
+                        else:
+                            logger.warning(f"OCR failed/empty on page {rp.page_number} — continuing")
+                            page_dict["ocr_text"] = ocr_result.text or ""
+                            page_dict["ocr_confidence"] = ocr_result.confidence or 0.0
+                            page_dict["ocr_status"] = ocr_result.status or "failed"
+                            page_dict["language"] = ocr_result.language_hint or "unknown"
+                            ocr_boxes = []
+
+                    excel.append_row("Pages", page_dict)
+                    await _log_audit(excel, document_id, None, "ocr_completed", "ocr",
+                                     details={"page": rp.page_number, "confidence": page_dict["ocr_confidence"]})
+
+                    p1_progress = 2.0 + ((page_idx + 1) / total_pages) * 28.0
+                    excel.update_row("Documents", {"document_id": document_id}, {
+                        "current_stage": f"Phase 1: OCR Scan — page {rp.page_number}/{total_pages} (IndicOCR)",
+                        "progress_percent": round(p1_progress, 1)
+                    })
+                    return (page_dict, rp, ocr_boxes)
+
+            # NOTE: OCR runs sequentially — GPU (EasyOCR/CUDA) is not thread-safe.
+            # Page coroutines are created and awaited one at a time to avoid
+            # CUDA memory races and unawaited-coroutine warnings.
+            page_results = []
+            for idx, rp in enumerate(pdf_result.pages):
+                result = await _process_single_page(idx, rp)
+                page_results.append(result)
+
+            if _is_cancelled():
+                logger.info(f"Document {document_id} was cancelled during OCR, exiting.")
+                return
+
+            pages_to_process = [r for r in page_results if r is not None]
+            # Ensure in original page order
+            pages_to_process.sort(key=lambda x: x[0]["page_number"])
+
+            logger.info(f"[Phase 1] Complete — {len(pages_to_process)} pages OCR'd")
 
             # =====================================================================
             # PHASE 2 — ARTICLE EXTRACTION + TRANSLATION (IndicTrans2)
             # Progress band: 30% → 65%
+            # Translations are gathered concurrently for ALL articles on ALL pages.
             # =====================================================================
             logger.info(f"[Phase 2] Extracting articles and translating with IndicTrans2")
             excel.update_row("Documents", {"document_id": document_id}, {
@@ -326,15 +453,19 @@ async def process_document_task(document_id: str, job_id: str):
             article_buffer = []
             total_articles_extracted = 0
 
-            for page_idx, (page, rp, ocr_boxes) in enumerate(pages_to_process):
-                p2_progress = 30.0 + (page_idx / total_pages) * 35.0
-
-                # Layout analysis / article segmentation
-                extracted_articles = await asyncio.to_thread(
+            # ---- Sub-step 2a: Layout extraction for ALL pages ----
+            layout_tasks = [
+                asyncio.to_thread(
                     analyze_layout, ocr_boxes,
                     page["page_width"] or 2480, page["page_height"] or 3508
                 )
+                for (page, rp, ocr_boxes) in pages_to_process
+            ]
+            layout_results = await asyncio.gather(*layout_tasks)
 
+            # Collect all articles from all pages into one flat list
+            all_articles_to_process = []  # list of (page, rp, extracted_articles)
+            for (page, rp, ocr_boxes), extracted_articles in zip(pages_to_process, layout_results):
                 # Fallback — treat whole page text as one article
                 if not extracted_articles and page.get("ocr_text"):
                     clean_txt = page["ocr_text"].strip()
@@ -355,98 +486,174 @@ async def process_document_task(document_id: str, job_id: str):
                                 bbox_height=page["page_height"] or 3508,
                             )
                         ]
+                if extracted_articles:
+                    all_articles_to_process.append((page, rp, extracted_articles))
 
-                for art_idx, ext_article in enumerate(extracted_articles):
-                    if ext_article.word_count < 2:
+            # ---- Sub-step 2b: Language detection — all articles concurrently ----
+            async def _detect_language(full_text: str):
+                return await asyncio.to_thread(
+                    _language_service.detect_multi, full_text
+                )
+
+            lang_tasks = [
+                _detect_language(ext_art.full_text)
+                for (page, rp, articles) in all_articles_to_process
+                for ext_art in articles
+                if ext_art.word_count >= 2
+            ]
+            lang_results = await asyncio.gather(*lang_tasks)
+
+            # ---- Sub-step 2c: Translation — all non-English articles concurrently ----
+            # Build (article, lang_result) pairs first
+            article_lang_pairs = []
+            lang_idx = 0
+            for (page, rp, articles) in all_articles_to_process:
+                for ext_art in articles:
+                    if ext_art.word_count < 2:
                         continue
-
-                    total_articles_extracted += 1
-                    article_id = str(uuid.uuid4())
-
-                    # Language detection
-                    lang_result = await asyncio.to_thread(
-                        _language_service.detect_multi, ext_article.full_text
-                    )
+                    lang_res = lang_results[lang_idx]
+                    lang_idx += 1
                     detected_lang = (
-                        lang_result.primary.language
-                        if lang_result and lang_result.primary else "en"
+                        lang_res.primary.language
+                        if lang_res and lang_res.primary else "en"
                     )
                     lang_confidence = (
-                        lang_result.primary.confidence
-                        if lang_result and lang_result.primary else 0.0
+                        lang_res.primary.confidence
+                        if lang_res and lang_res.primary else 0.0
                     )
+                    article_lang_pairs.append((page, ext_art, detected_lang, lang_confidence))
 
-                    # Save article record
-                    article_dict = {
+            # article_lang_pairs is built; count non-English articles that need translation
+            articles_to_translate_count = sum(
+                1 for (_, _, lang, conf) in article_lang_pairs
+                if lang != "en" and conf > 40
+            )
+
+            excel.update_row("Documents", {"document_id": document_id}, {
+                "current_stage": f"Phase 2: Translating {articles_to_translate_count} articles — GPU batch (IndicTrans2)",
+                "progress_percent": 33.0
+            })
+
+            # ---- Sub-step 2c (optimised): Group articles by source language and
+            # send each language group as a single GPU batch call. This maximises
+            # GPU utilisation — one model.generate() per language instead of one per article.
+            from collections import defaultdict
+            lang_groups: dict = defaultdict(list)  # lang -> [(pair_index, text)]
+            passthrough_map: dict = {}  # pair_index -> original text (for English/low-confidence)
+
+            for pair_idx, (page, ext_art, detected_lang, lang_confidence) in enumerate(article_lang_pairs):
+                if detected_lang == "en" or lang_confidence <= 40:
+                    passthrough_map[pair_idx] = ext_art.full_text
+                else:
+                    lang_groups[detected_lang].append((pair_idx, ext_art.full_text))
+
+            # Translate each language group as a batch
+            batch_translation_map: dict = {}  # pair_index -> TranslationServiceResult
+            for lang, items in lang_groups.items():
+                pair_indices = [i for i, _ in items]
+                texts_to_translate = [t for _, t in items]
+                logger.info(f"[Phase 2] Batch translating {len(texts_to_translate)} articles from '{lang}' → GPU batch")
+                try:
+                    batch_results = await asyncio.to_thread(
+                        _translation_service.translate_batch,
+                        texts_to_translate,
+                        lang,
+                        "en",
+                    )
+                    for pair_idx, trans_result in zip(pair_indices, batch_results):
+                        batch_translation_map[pair_idx] = trans_result
+                except Exception as e:
+                    logger.warning(f"Batch translation failed for lang '{lang}': {e} — falling back to original text")
+                    for pair_idx, orig_text in items:
+                        batch_translation_map[pair_idx] = None
+
+            # Build translation_results list aligned with article_lang_pairs
+            translation_results = []
+            for pair_idx, (page, ext_art, detected_lang, lang_confidence) in enumerate(article_lang_pairs):
+                if pair_idx in passthrough_map:
+                    translation_results.append((passthrough_map[pair_idx], None))
+                else:
+                    trans_res = batch_translation_map.get(pair_idx)
+                    if trans_res and getattr(trans_res, "status", "success") == "success" and trans_res.translated_text:
+                        translation_results.append((trans_res.translated_text, trans_res))
+                    else:
+                        translation_results.append((ext_art.full_text, trans_res))
+
+            # Flush GPU VRAM cache after batch translation to free fragmented memory
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.info("[Phase 2] GPU VRAM cache flushed after batch translation")
+            except Exception:
+                pass
+
+            # ---- Sub-step 2d: Persist articles + translations to Excel ----
+            for art_idx, ((page, ext_art, detected_lang, lang_confidence), (translated_text, trans_result)) in enumerate(
+                zip(article_lang_pairs, translation_results)
+            ):
+                if _is_cancelled():
+                    logger.info(f"Document {document_id} cancelled during Phase 2 persist, exiting.")
+                    return
+
+                total_articles_extracted += 1
+                article_id = str(uuid.uuid4())
+
+                p2_progress = 35.0 + (art_idx / max(len(article_lang_pairs), 1)) * 28.0
+                excel.update_row("Documents", {"document_id": document_id}, {
+                    "current_stage": f"Phase 2: Saving articles — {art_idx + 1}/{len(article_lang_pairs)}",
+                    "progress_percent": round(p2_progress, 1)
+                })
+
+                translation_confidence = None
+                if trans_result is not None:
+                    translation_confidence = getattr(trans_result, "confidence", None)
+
+                # Save article record
+                article_dict = {
+                    "article_id": article_id,
+                    "document_id": document_id,
+                    "page_id": page["page_id"],
+                    "page_number": page["page_number"],
+                    "headline": ext_art.headline,
+                    "original_text": ext_art.full_text,
+                    "language": detected_lang,
+                    "article_type": ext_art.article_type,
+                    "x1": ext_art.bbox_x,
+                    "y1": ext_art.bbox_y,
+                    "x2": (ext_art.bbox_x or 0) + (ext_art.bbox_width or 0),
+                    "y2": (ext_art.bbox_y or 0) + (ext_art.bbox_height or 0),
+                    "ocr_confidence": page["ocr_confidence"],
+                    "article_confidence": ext_art.confidence,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                excel.append_row("Articles", article_dict)
+
+                if trans_result is not None and getattr(trans_result, "status", None) == "success":
+                    trans_dict = {
+                        "translation_id": str(uuid.uuid4()),
                         "article_id": article_id,
-                        "document_id": document_id,
-                        "page_id": page["page_id"],
-                        "page_number": page["page_number"],
-                        "headline": ext_article.headline,
-                        "original_text": ext_article.full_text,
-                        "language": detected_lang,
-                        "article_type": ext_article.article_type,
-                        "x1": ext_article.bbox_x,
-                        "y1": ext_article.bbox_y,
-                        "x2": (ext_article.bbox_x or 0) + (ext_article.bbox_width or 0),
-                        "y2": (ext_article.bbox_y or 0) + (ext_article.bbox_height or 0),
-                        "ocr_confidence": page["ocr_confidence"],
-                        "article_confidence": ext_article.confidence,
-                        "created_at": datetime.utcnow().isoformat()
-                    }
-                    excel.append_row("Articles", article_dict)
-
-                    # Update progress within Phase 2
-                    excel.update_row("Documents", {"document_id": document_id}, {
-                        "current_stage": f"Phase 2: Translating — page {page['page_number']}/{total_pages} (IndicTrans2)",
-                        "progress_percent": round(p2_progress + (art_idx / max(len(extracted_articles), 1)) * (35.0 / total_pages), 1)
-                    })
-
-                    # Translation (only for non-English text with sufficient confidence)
-                    translated_text = ext_article.full_text
-                    translation_confidence = None
-
-                    if detected_lang != "en" and lang_confidence > 40:
-                        try:
-                            trans_result = await asyncio.to_thread(
-                                _translation_service.translate,
-                                ext_article.full_text,
-                                detected_lang,
-                                "en",
-                                []  # brand names added in phase 3
-                            )
-                            if trans_result.status == "success" and trans_result.translated_text:
-                                translated_text = trans_result.translated_text
-                                translation_confidence = trans_result.confidence
-                            else:
-                                translation_confidence = 50.0
-
-                            trans_dict = {
-                                "translation_id": str(uuid.uuid4()),
-                                "article_id": article_id,
-                                "source_language": detected_lang,
-                                "target_language": "en",
-                                "original_text": ext_article.full_text,
-                                "translated_text": translated_text,
-                                "translation_confidence": translation_confidence,
-                                "entity_protected": getattr(trans_result, "entities_protected", []),
-                                "review_required": getattr(trans_result, "review_required", False),
-                                "translation_model": getattr(trans_result, "model_used", "none"),
-                                "created_at": datetime.utcnow().isoformat()
-                            }
-                            excel.append_row("Translations", trans_dict)
-                        except Exception as e:
-                            logger.warning(f"Translation failed for article {article_id}: {e}")
-
-                    # Buffer for Phase 3
-                    article_buffer.append({
-                        "article_id": article_id,
-                        "page": page,
-                        "ext_article": ext_article,
-                        "detected_lang": detected_lang,
+                        "source_language": detected_lang,
+                        "target_language": "en",
+                        "original_text": ext_art.full_text,
                         "translated_text": translated_text,
                         "translation_confidence": translation_confidence,
-                    })
+                        "entity_protected": getattr(trans_result, "entities_protected", []),
+                        "review_required": getattr(trans_result, "review_required", False),
+                        "translation_model": getattr(trans_result, "model_used", "none"),
+                        "created_at": datetime.utcnow().isoformat()
+                    }
+                    excel.append_row("Translations", trans_dict)
+
+                # Buffer for Phase 3
+                article_buffer.append({
+                    "article_id": article_id,
+                    "page": page,
+                    "ext_article": ext_art,
+                    "detected_lang": detected_lang,
+                    "translated_text": translated_text,
+                    "translation_confidence": translation_confidence,
+                })
 
             logger.info(f"[Phase 2] Complete — {total_articles_extracted} articles extracted and translated")
 
@@ -480,11 +687,27 @@ async def process_document_task(document_id: str, job_id: str):
                     "active": True,
                 })
 
+            # Pre-initialize NLP services once for Phase 3
+            from pipeline.nlp.entity.extractor import EntityExtractor
+            from pipeline.nlp.entity.brand_matcher import BrandMatcher
+            entity_extractor = EntityExtractor()
+            brand_matcher = BrandMatcher()
+            brand_matcher.load_brands(brand_dicts)
+
+            # Cache LFM availability ONCE before the loop — avoids N HTTP calls to Ollama
+            lfm_available = _lfm_service.is_available()
+            logger.info(f"[Phase 3] LFM available: {lfm_available}")
+
             doc_sentiments = []
             doc_risk_scores = []
             total_art = max(len(article_buffer), 1)
 
             for art_idx, buf in enumerate(article_buffer):
+                # Throttle cancel check to every 5 articles (Excel scan is expensive)
+                if art_idx % 5 == 0 and _is_cancelled():
+                    logger.info(f"Document {document_id} cancelled during Phase 3, exiting.")
+                    return
+
                 article_id = buf["article_id"]
                 page = buf["page"]
                 ext_article = buf["ext_article"]
@@ -499,8 +722,6 @@ async def process_document_task(document_id: str, job_id: str):
                 })
 
                 # Entity detection — scan page for all named entities
-                from pipeline.nlp.entity.extractor import EntityExtractor
-                entity_extractor = EntityExtractor()
                 detected_entities = await asyncio.to_thread(
                     entity_extractor.extract, translated_text, "en"
                 )
@@ -523,9 +744,6 @@ async def process_document_task(document_id: str, job_id: str):
                     })
 
                 # Brand matching — scan for companies and verify against provided list
-                from pipeline.nlp.entity.brand_matcher import BrandMatcher
-                brand_matcher = BrandMatcher()
-                brand_matcher.load_brands(brand_dicts)
                 brand_matches = brand_matcher.match(translated_text, entity_texts)
 
                 # Group verified company matches by their canonical name in the provided list
@@ -584,7 +802,7 @@ async def process_document_task(document_id: str, job_id: str):
                     comp_reason = auto_reason
 
                     # Targeted LFM analysis specifically for this company
-                    if _lfm_service.is_available():
+                    if lfm_available:
                         try:
                             lfm_result = await asyncio.to_thread(
                                 _lfm_service.analyze,
@@ -792,6 +1010,8 @@ async def process_document_task(document_id: str, job_id: str):
                 await _log_audit(excel, document_id, None, "pipeline_failed", "pipeline", details={"error": str(e)})
             except Exception:
                 pass
+        finally:
+            unregister_task(document_id)
 
 
 async def _log_audit(excel: ExcelStorageService, doc_id: str, article_id: str,

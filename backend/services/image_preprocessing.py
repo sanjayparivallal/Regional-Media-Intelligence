@@ -1,9 +1,19 @@
 """
 Image Preprocessing Service.
 
-Adaptive preprocessing pipeline that checks image quality first
-and only applies necessary operations.
-Preserves the original image — never overwrites evidence.
+Fast adaptive preprocessing pipeline for OCR.
+
+Key design principles:
+- All quality assessment runs on a DOWNSCALED thumbnail (max 800 px),
+  so Laplacian / HoughLinesP operate on ~0.1 MP instead of 8+ MP.
+- Denoising is intentionally skipped — cv2.fastNlMeansDenoising is
+  extremely slow on large images (90-180 s) and provides negligible
+  benefit for newspaper OCR.
+- Deskew angle is detected on the thumbnail; rotation is then applied
+  to the full-resolution image (fast affine warp).
+- If no preprocessing is needed the original path is returned immediately
+  without any disk I/O.
+- Original image is NEVER modified — a _processed copy is saved.
 """
 
 import logging
@@ -16,14 +26,18 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Maximum dimension used for all quality assessment calculations.
+# Keeps HoughLinesP / Laplacian fast regardless of source image size.
+_ASSESS_MAX_DIM = 800
+
 
 @dataclass
 class ImageQualityReport:
     """Quality assessment of an image."""
-    brightness: float  # 0-255
-    contrast: float  # 0-100
-    sharpness: float  # 0-100
-    noise_level: float  # 0-100
+    brightness: float       # 0-255
+    contrast: float         # 0-100
+    sharpness: float        # 0-100
+    noise_level: float      # 0-100
     is_skewed: bool
     skew_angle: float
     needs_preprocessing: bool
@@ -44,185 +58,36 @@ class ImageQualityReport:
 
 class ImagePreprocessingService:
     """
-    Adaptive image preprocessing for OCR.
+    Fast adaptive image preprocessing for OCR.
 
-    Only applies necessary preprocessing based on quality assessment.
-    Preserves original images — processes a copy.
+    All quality checks run on a tiny thumbnail so large newspaper
+    scans are assessed in < 0.5 s instead of 60-180 s.
+    Only contrast enhancement and deskew are applied; denoising is
+    intentionally omitted (too slow, negligible OCR benefit on newsprint).
     """
 
-    def assess_quality(self, image_path: str) -> ImageQualityReport:
-        """
-        Assess image quality to determine what preprocessing is needed.
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        Args:
-            image_path: Path to the image file
-
-        Returns:
-            ImageQualityReport with quality metrics and recommendations
-        """
+    @staticmethod
+    def _make_thumbnail(gray: np.ndarray, max_dim: int = _ASSESS_MAX_DIM) -> np.ndarray:
+        """Return a downscaled grayscale copy for fast analysis."""
         import cv2
+        h, w = gray.shape[:2]
+        biggest = max(h, w)
+        if biggest <= max_dim:
+            return gray
+        scale = max_dim / biggest
+        return cv2.resize(gray, (max(1, int(w * scale)), max(1, int(h * scale))),
+                          interpolation=cv2.INTER_AREA)
 
-        image = cv2.imread(image_path)
-        if image is None:
-            return ImageQualityReport(
-                brightness=0, contrast=0, sharpness=0, noise_level=0,
-                is_skewed=False, skew_angle=0,
-                needs_preprocessing=True,
-                recommended_operations=["image_load_failed"],
-            )
-
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-
-        # Brightness
-        brightness = float(np.mean(gray))
-
-        # Contrast (standard deviation of pixel values)
-        contrast = float(np.std(gray))
-
-        # Sharpness (Laplacian variance)
-        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-        sharpness = float(laplacian.var())
-        sharpness_normalized = min(sharpness / 100, 100)
-
-        # Noise estimate (using median absolute deviation)
-        median = np.median(gray)
-        mad = np.median(np.abs(gray.astype(float) - median))
-        noise_level = float(mad)
-
-        # Skew detection
-        skew_angle = self._detect_skew(gray)
-        is_skewed = abs(skew_angle) > 1.0
-
-        # Determine recommendations
-        operations = []
-        needs = False
-
-        if brightness < 80 or brightness > 200:
-            operations.append("contrast_enhancement")
-            needs = True
-
-        if contrast < 40:
-            operations.append("contrast_enhancement")
-            needs = True
-
-        if sharpness_normalized < 10:
-            operations.append("sharpening")
-            needs = True
-
-        if noise_level > 30:
-            operations.append("denoising")
-            needs = True
-
-        if is_skewed:
-            operations.append("deskew")
-            needs = True
-
-        return ImageQualityReport(
-            brightness=brightness,
-            contrast=contrast,
-            sharpness=sharpness_normalized,
-            noise_level=noise_level,
-            is_skewed=is_skewed,
-            skew_angle=skew_angle,
-            needs_preprocessing=needs,
-            recommended_operations=list(set(operations)),
-        )
-
-    def preprocess(
-        self,
-        image_path: str,
-        output_path: Optional[str] = None,
-        operations: Optional[list] = None,
-    ) -> str:
-        """
-        Apply adaptive preprocessing to an image.
-
-        Args:
-            image_path: Path to the original image
-            output_path: Where to save the processed image (original is never modified)
-            operations: Specific operations to apply. If None, auto-determines from quality assessment.
-
-        Returns:
-            Path to the processed image
-        """
+    def _detect_skew(self, gray_thumb: np.ndarray) -> float:
+        """Detect skew angle using HoughLinesP on a THUMBNAIL (fast)."""
         import cv2
-
-        image = cv2.imread(image_path)
-        if image is None:
-            raise ValueError(f"Cannot read image: {image_path}")
-
-        # Auto-assess if no operations specified
-        if operations is None:
-            quality = self.assess_quality(image_path)
-            operations = quality.recommended_operations
-
-        if not operations:
-            # No preprocessing needed — return original
-            return image_path
-
-        # Work on a copy
-        processed = image.copy()
-
-        for op in operations:
-            if op == "grayscale":
-                if len(processed.shape) == 3:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
-
-            elif op == "contrast_enhancement":
-                if len(processed.shape) == 3:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                processed = clahe.apply(processed)
-
-            elif op == "denoising":
-                if len(processed.shape) == 3:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
-                processed = cv2.fastNlMeansDenoising(processed, None, 10, 7, 21)
-
-            elif op == "sharpening":
-                kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-                processed = cv2.filter2D(processed, -1, kernel)
-
-            elif op == "deskew":
-                if len(processed.shape) == 3:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
-                angle = self._detect_skew(processed)
-                if abs(angle) > 0.5:
-                    h, w = processed.shape[:2]
-                    center = (w // 2, h // 2)
-                    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-                    processed = cv2.warpAffine(
-                        processed, M, (w, h),
-                        flags=cv2.INTER_CUBIC,
-                        borderMode=cv2.BORDER_REPLICATE,
-                    )
-
-            elif op == "threshold":
-                if len(processed.shape) == 3:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
-                processed = cv2.adaptiveThreshold(
-                    processed, 255,
-                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv2.THRESH_BINARY, 11, 2,
-                )
-
-        # Save processed image
-        if output_path is None:
-            p = Path(image_path)
-            output_path = str(p.parent / f"{p.stem}_processed{p.suffix}")
-
-        cv2.imwrite(output_path, processed)
-        logger.info(f"Preprocessed image saved: {output_path} (operations: {operations})")
-
-        return output_path
-
-    def _detect_skew(self, gray: np.ndarray) -> float:
-        """Detect skew angle using Hough transform."""
-        import cv2
-
-        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
-
+        edges = cv2.Canny(gray_thumb, 50, 150, apertureSize=3)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 80,
+                                minLineLength=50, maxLineGap=10)
         if lines is None or len(lines) == 0:
             return 0.0
 
@@ -238,7 +103,153 @@ class ImagePreprocessingService:
             except Exception:
                 continue
 
-        if not angles:
-            return 0.0
+        return float(np.median(angles)) if angles else 0.0
 
-        return float(np.median(angles))
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def assess_quality(self, image_path: str) -> ImageQualityReport:
+        """
+        Assess image quality to determine what preprocessing is needed.
+
+        All heavy operations run on a small thumbnail so this returns in
+        well under 1 second even for large full-page newspaper scans.
+
+        Args:
+            image_path: Path to the image file
+
+        Returns:
+            ImageQualityReport with quality metrics and recommendations.
+            Note: 'denoising' is NEVER recommended — it is too slow and
+            offers negligible benefit for newspaper OCR.
+        """
+        import cv2
+
+        image = cv2.imread(image_path)
+        if image is None:
+            return ImageQualityReport(
+                brightness=0, contrast=0, sharpness=0, noise_level=0,
+                is_skewed=False, skew_angle=0,
+                needs_preprocessing=False,
+                recommended_operations=[],
+            )
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+
+        # All metric computation on thumbnail — fast regardless of source size
+        thumb = self._make_thumbnail(gray)
+
+        brightness = float(np.mean(thumb))
+        contrast = float(np.std(thumb))
+
+        # Sharpness via Laplacian variance (thumbnail)
+        laplacian = cv2.Laplacian(thumb, cv2.CV_64F)
+        sharpness_normalized = min(float(laplacian.var()) / 100, 100)
+
+        # Noise estimate via median absolute deviation (thumbnail)
+        median_val = np.median(thumb)
+        mad = np.median(np.abs(thumb.astype(float) - median_val))
+        noise_level = float(mad)
+
+        # Skew — HoughLinesP on thumbnail
+        skew_angle = self._detect_skew(thumb)
+        is_skewed = abs(skew_angle) > 1.0
+
+        operations = []
+        needs = False
+
+        if brightness < 80 or brightness > 210 or contrast < 40:
+            operations.append("contrast_enhancement")
+            needs = True
+
+        if is_skewed:
+            operations.append("deskew")
+            needs = True
+
+        # NOTE: "denoising" intentionally excluded — cv2.fastNlMeansDenoising
+        # is O(n²) on large images and takes 60-180 s on full newspaper pages.
+        # Sharpening is also skipped as it rarely helps EasyOCR on newsprint.
+
+        return ImageQualityReport(
+            brightness=brightness,
+            contrast=contrast,
+            sharpness=sharpness_normalized,
+            noise_level=noise_level,
+            is_skewed=is_skewed,
+            skew_angle=skew_angle,
+            needs_preprocessing=needs,
+            recommended_operations=list(dict.fromkeys(operations)),  # dedupe, preserve order
+        )
+
+    def preprocess(
+        self,
+        image_path: str,
+        output_path: Optional[str] = None,
+        operations: Optional[list] = None,
+    ) -> str:
+        """
+        Apply adaptive preprocessing to an image.
+
+        Only contrast enhancement and deskew are applied.
+        All operations work on a grayscale version of the image for speed.
+        The original file is NEVER modified.
+
+        Args:
+            image_path: Path to the original image
+            output_path: Destination for processed image (auto-generated if None)
+            operations: Specific operations list; None = auto-detect from quality report
+
+        Returns:
+            Path to processed image, or original path if no processing needed.
+        """
+        import cv2
+
+        if operations is None:
+            quality = self.assess_quality(image_path)
+            operations = quality.recommended_operations
+
+        if not operations:
+            # Nothing to do — return original immediately (no disk I/O)
+            return image_path
+
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Cannot read image: {image_path}")
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
+
+        # Detect skew angle from thumbnail (if deskew will be applied)
+        skew_angle = 0.0
+        if "deskew" in operations:
+            thumb = self._make_thumbnail(gray)
+            skew_angle = self._detect_skew(thumb)
+
+        # Apply operations in order
+        for op in operations:
+            if op == "contrast_enhancement":
+                # CLAHE on full-resolution grayscale — fast (single pass)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                gray = clahe.apply(gray)
+
+            elif op == "deskew":
+                if abs(skew_angle) > 0.5:
+                    h, w = gray.shape[:2]
+                    center = (w // 2, h // 2)
+                    M = cv2.getRotationMatrix2D(center, skew_angle, 1.0)
+                    gray = cv2.warpAffine(
+                        gray, M, (w, h),
+                        flags=cv2.INTER_LINEAR,
+                        borderMode=cv2.BORDER_REPLICATE,
+                    )
+
+            # "denoising", "sharpening", "threshold", "grayscale" — intentionally skipped
+            # for performance reasons. Add back only if accuracy benchmarks justify it.
+
+        if output_path is None:
+            p = Path(image_path)
+            output_path = str(p.parent / f"{p.stem}_processed{p.suffix}")
+
+        cv2.imwrite(output_path, gray)
+        logger.debug(f"Preprocessed image saved: {output_path} (ops: {operations})")
+        return output_path
